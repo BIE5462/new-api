@@ -123,6 +123,44 @@ const OPERATIONS_SECTIONS = [
             settings['performance_setting.monitor_memory_threshold'] ?? 90,
           'performance_setting.monitor_disk_threshold':
             settings['performance_setting.monitor_disk_threshold'] ?? 95,
+          'generated_image_storage.enabled':
+            settings['generated_image_storage.enabled'] ?? false,
+          'generated_image_storage.provider':
+            settings['generated_image_storage.provider'] ?? 'aliyun_oss',
+          'generated_image_storage.credential_mode':
+            settings['generated_image_storage.credential_mode'] ?? 'env',
+          'generated_image_storage.ecs_ram_role_name':
+            settings['generated_image_storage.ecs_ram_role_name'] ?? '',
+          'generated_image_storage.bucket':
+            settings['generated_image_storage.bucket'] ?? '',
+          'generated_image_storage.region':
+            settings['generated_image_storage.region'] ?? '',
+          'generated_image_storage.internal_endpoint':
+            settings['generated_image_storage.internal_endpoint'] ?? '',
+          'generated_image_storage.external_endpoint':
+            settings['generated_image_storage.external_endpoint'] ?? '',
+          'generated_image_storage.public_base_url':
+            settings['generated_image_storage.public_base_url'] ?? '',
+          'generated_image_storage.presign_enabled':
+            settings['generated_image_storage.presign_enabled'] ?? true,
+          'generated_image_storage.presign_ttl_seconds':
+            settings['generated_image_storage.presign_ttl_seconds'] ?? 3600,
+          'generated_image_storage.object_prefix':
+            settings['generated_image_storage.object_prefix'] ??
+            'gemini/generated',
+          'generated_image_storage.threshold_mb':
+            settings['generated_image_storage.threshold_mb'] ?? 1,
+          'generated_image_storage.max_image_mb':
+            settings['generated_image_storage.max_image_mb'] ?? 64,
+          'generated_image_storage.max_total_mb':
+            settings['generated_image_storage.max_total_mb'] ?? 128,
+          'generated_image_storage.max_upload_concurrency':
+            settings['generated_image_storage.max_upload_concurrency'] ?? 2,
+          'generated_image_storage.upload_timeout_seconds':
+            settings['generated_image_storage.upload_timeout_seconds'] ?? 60,
+          'generated_image_storage.failure_policy':
+            settings['generated_image_storage.failure_policy'] ??
+            'fallback_inline',
         }}
       />
     ),

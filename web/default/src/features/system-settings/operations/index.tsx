@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useStatus } from '@/hooks/use-status'
+
 import { SettingsPage } from '../components/settings-page'
 import type { OperationsSettings } from '../types'
 import {
@@ -51,6 +52,24 @@ const defaultOperationsSettings: OperationsSettings = {
   'performance_setting.monitor_cpu_threshold': 90,
   'performance_setting.monitor_memory_threshold': 90,
   'performance_setting.monitor_disk_threshold': 95,
+  'generated_image_storage.enabled': false,
+  'generated_image_storage.provider': 'aliyun_oss',
+  'generated_image_storage.credential_mode': 'env',
+  'generated_image_storage.ecs_ram_role_name': '',
+  'generated_image_storage.bucket': '',
+  'generated_image_storage.region': '',
+  'generated_image_storage.internal_endpoint': '',
+  'generated_image_storage.external_endpoint': '',
+  'generated_image_storage.public_base_url': '',
+  'generated_image_storage.presign_enabled': true,
+  'generated_image_storage.presign_ttl_seconds': 3600,
+  'generated_image_storage.object_prefix': 'gemini/generated',
+  'generated_image_storage.threshold_mb': 1,
+  'generated_image_storage.max_image_mb': 64,
+  'generated_image_storage.max_total_mb': 128,
+  'generated_image_storage.max_upload_concurrency': 2,
+  'generated_image_storage.upload_timeout_seconds': 60,
+  'generated_image_storage.failure_policy': 'fallback_inline',
   'perf_metrics_setting.enabled': true,
   'perf_metrics_setting.flush_interval': 5,
   'perf_metrics_setting.bucket_time': 'hour',

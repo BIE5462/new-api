@@ -355,6 +355,24 @@ export type OperationsSettings = {
   'performance_setting.monitor_cpu_threshold': number
   'performance_setting.monitor_memory_threshold': number
   'performance_setting.monitor_disk_threshold': number
+  'generated_image_storage.enabled': boolean
+  'generated_image_storage.provider': string
+  'generated_image_storage.credential_mode': 'env' | 'ecs_ram_role'
+  'generated_image_storage.ecs_ram_role_name': string
+  'generated_image_storage.bucket': string
+  'generated_image_storage.region': string
+  'generated_image_storage.internal_endpoint': string
+  'generated_image_storage.external_endpoint': string
+  'generated_image_storage.public_base_url': string
+  'generated_image_storage.presign_enabled': boolean
+  'generated_image_storage.presign_ttl_seconds': number
+  'generated_image_storage.object_prefix': string
+  'generated_image_storage.threshold_mb': number
+  'generated_image_storage.max_image_mb': number
+  'generated_image_storage.max_total_mb': number
+  'generated_image_storage.max_upload_concurrency': number
+  'generated_image_storage.upload_timeout_seconds': number
+  'generated_image_storage.failure_policy': 'fallback_inline' | 'fail_request'
   'perf_metrics_setting.enabled': boolean
   'perf_metrics_setting.flush_interval': number
   'perf_metrics_setting.bucket_time': 'hour' | 'minute' | '5min'

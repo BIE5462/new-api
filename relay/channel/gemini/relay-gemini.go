@@ -1507,12 +1507,16 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 	service.CloseResponseBodyGracefully(resp)
-	logger.LogDebug(c, "Gemini response body: %s", responseBody)
+
 	var geminiResponse dto.GeminiChatResponse
 	err = common.Unmarshal(responseBody, &geminiResponse)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+
+	inlineImageCount, inlineBase64Chars, textPreview := geminiResponseDebugSummary(&geminiResponse)
+	logger.LogDebug(c, "Gemini response summary: body_bytes=%d candidates=%d inline_images=%d inline_base64_chars=%d text_preview=%q", len(responseBody), len(geminiResponse.Candidates), inlineImageCount, inlineBase64Chars, textPreview)
+
 	if len(geminiResponse.Candidates) == 0 {
 		usage := buildUsageFromGeminiMetadata(geminiResponse.UsageMetadata, info.GetEstimatePromptTokens())
 
@@ -1548,19 +1552,22 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 		}
 		return &usage, nil
 	}
-	fullTextResponse := responseGeminiChat2OpenAI(c, &geminiResponse)
-	fullTextResponse.Model = info.UpstreamModelName
-	usage := buildUsageFromGeminiMetadata(geminiResponse.UsageMetadata, info.GetEstimatePromptTokens())
 
-	fullTextResponse.Usage = usage
+	usage := buildUsageFromGeminiMetadata(geminiResponse.UsageMetadata, info.GetEstimatePromptTokens())
 
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:
+		fullTextResponse := responseGeminiChat2OpenAI(c, &geminiResponse)
+		fullTextResponse.Model = info.UpstreamModelName
+		fullTextResponse.Usage = usage
 		responseBody, err = common.Marshal(fullTextResponse)
 		if err != nil {
 			return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 		}
 	case types.RelayFormatClaude:
+		fullTextResponse := responseGeminiChat2OpenAI(c, &geminiResponse)
+		fullTextResponse.Model = info.UpstreamModelName
+		fullTextResponse.Usage = usage
 		claudeResp := service.ResponseOpenAI2Claude(fullTextResponse, info)
 		claudeRespStr, err := common.Marshal(claudeResp)
 		if err != nil {
@@ -1568,7 +1575,16 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 		}
 		responseBody = claudeRespStr
 	case types.RelayFormatGemini:
-		break
+		changed, err := offloadGeminiInlineImages(c, info, &geminiResponse)
+		if err != nil {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+		}
+		if changed {
+			responseBody, err = common.Marshal(geminiResponse)
+			if err != nil {
+				return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+			}
+		}
 	}
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)

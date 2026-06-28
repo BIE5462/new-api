@@ -20,26 +20,35 @@ import (
 func GeminiTextGenerationHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
 	defer service.CloseResponseBodyGracefully(resp)
 
-	// 读取响应体
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 
-	logger.LogDebug(c, "Gemini native response body: %s", responseBody)
-
-	// 解析为 Gemini 原生响应格式
 	var geminiResponse dto.GeminiChatResponse
 	err = common.Unmarshal(responseBody, &geminiResponse)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 
+	inlineImageCount, inlineBase64Chars, textPreview := geminiResponseDebugSummary(&geminiResponse)
+	logger.LogDebug(c, "Gemini native response summary: body_bytes=%d candidates=%d inline_images=%d inline_base64_chars=%d text_preview=%q", len(responseBody), len(geminiResponse.Candidates), inlineImageCount, inlineBase64Chars, textPreview)
+
 	if len(geminiResponse.Candidates) == 0 && geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
 		common.SetContextKey(c, constant.ContextKeyAdminRejectReason, fmt.Sprintf("gemini_block_reason=%s", *geminiResponse.PromptFeedback.BlockReason))
 	}
 
-	// 计算使用量（基于 UsageMetadata）
+	changed, err := offloadGeminiInlineImages(c, info, &geminiResponse)
+	if err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+	}
+	if changed {
+		responseBody, err = common.Marshal(geminiResponse)
+		if err != nil {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+		}
+	}
+
 	usage := buildUsageFromGeminiMetadata(geminiResponse.UsageMetadata, info.GetEstimatePromptTokens())
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)

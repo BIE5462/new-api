@@ -16,13 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import * as z from 'zod'
-import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { api } from '@/lib/api'
+import * as z from 'zod'
+
+import { StatusBadge } from '@/components/status-badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
@@ -47,9 +48,18 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
-import { StatusBadge } from '@/components/status-badge'
+import { api } from '@/lib/api'
+
 import {
   SettingsForm,
   SettingsSwitchContent,
@@ -79,6 +89,26 @@ const perfSchema = z.object({
     monitor_memory_threshold: z.coerce.number().min(0).max(100),
     monitor_disk_threshold: z.coerce.number().min(0).max(100),
   }),
+  generated_image_storage: z.object({
+    enabled: z.boolean(),
+    provider: z.string(),
+    credential_mode: z.enum(['env', 'ecs_ram_role']),
+    ecs_ram_role_name: z.string(),
+    bucket: z.string(),
+    region: z.string(),
+    internal_endpoint: z.string(),
+    external_endpoint: z.string(),
+    public_base_url: z.string(),
+    presign_enabled: z.boolean(),
+    presign_ttl_seconds: z.coerce.number().min(1).max(604800),
+    object_prefix: z.string(),
+    threshold_mb: z.coerce.number().min(1),
+    max_image_mb: z.coerce.number().min(1),
+    max_total_mb: z.coerce.number().min(1),
+    max_upload_concurrency: z.coerce.number().min(1).max(16),
+    upload_timeout_seconds: z.coerce.number().min(1).max(600),
+    failure_policy: z.enum(['fallback_inline', 'fail_request']),
+  }),
 })
 
 type PerfFormInput = z.input<typeof perfSchema>
@@ -93,6 +123,24 @@ type FlatPerfDefaults = {
   'performance_setting.monitor_cpu_threshold': number
   'performance_setting.monitor_memory_threshold': number
   'performance_setting.monitor_disk_threshold': number
+  'generated_image_storage.enabled': boolean
+  'generated_image_storage.provider': string
+  'generated_image_storage.credential_mode': 'env' | 'ecs_ram_role'
+  'generated_image_storage.ecs_ram_role_name': string
+  'generated_image_storage.bucket': string
+  'generated_image_storage.region': string
+  'generated_image_storage.internal_endpoint': string
+  'generated_image_storage.external_endpoint': string
+  'generated_image_storage.public_base_url': string
+  'generated_image_storage.presign_enabled': boolean
+  'generated_image_storage.presign_ttl_seconds': number
+  'generated_image_storage.object_prefix': string
+  'generated_image_storage.threshold_mb': number
+  'generated_image_storage.max_image_mb': number
+  'generated_image_storage.max_total_mb': number
+  'generated_image_storage.max_upload_concurrency': number
+  'generated_image_storage.upload_timeout_seconds': number
+  'generated_image_storage.failure_policy': 'fallback_inline' | 'fail_request'
 }
 
 const buildFormDefaults = (defaults: FlatPerfDefaults): PerfFormInput => ({
@@ -110,6 +158,35 @@ const buildFormDefaults = (defaults: FlatPerfDefaults): PerfFormInput => ({
       defaults['performance_setting.monitor_memory_threshold'],
     monitor_disk_threshold:
       defaults['performance_setting.monitor_disk_threshold'],
+  },
+  generated_image_storage: {
+    enabled: defaults['generated_image_storage.enabled'],
+    provider: defaults['generated_image_storage.provider'] ?? 'aliyun_oss',
+    credential_mode:
+      defaults['generated_image_storage.credential_mode'] ?? 'env',
+    ecs_ram_role_name:
+      defaults['generated_image_storage.ecs_ram_role_name'] ?? '',
+    bucket: defaults['generated_image_storage.bucket'] ?? '',
+    region: defaults['generated_image_storage.region'] ?? '',
+    internal_endpoint:
+      defaults['generated_image_storage.internal_endpoint'] ?? '',
+    external_endpoint:
+      defaults['generated_image_storage.external_endpoint'] ?? '',
+    public_base_url: defaults['generated_image_storage.public_base_url'] ?? '',
+    presign_enabled: defaults['generated_image_storage.presign_enabled'],
+    presign_ttl_seconds:
+      defaults['generated_image_storage.presign_ttl_seconds'],
+    object_prefix:
+      defaults['generated_image_storage.object_prefix'] ?? 'gemini/generated',
+    threshold_mb: defaults['generated_image_storage.threshold_mb'],
+    max_image_mb: defaults['generated_image_storage.max_image_mb'],
+    max_total_mb: defaults['generated_image_storage.max_total_mb'],
+    max_upload_concurrency:
+      defaults['generated_image_storage.max_upload_concurrency'],
+    upload_timeout_seconds:
+      defaults['generated_image_storage.upload_timeout_seconds'],
+    failure_policy:
+      defaults['generated_image_storage.failure_policy'] ?? 'fallback_inline',
   },
 })
 
@@ -130,6 +207,38 @@ const normalizeFormValues = (values: PerfFormValues): FlatPerfDefaults => ({
     values.performance_setting.monitor_memory_threshold,
   'performance_setting.monitor_disk_threshold':
     values.performance_setting.monitor_disk_threshold,
+  'generated_image_storage.enabled': values.generated_image_storage.enabled,
+  'generated_image_storage.provider': values.generated_image_storage.provider,
+  'generated_image_storage.credential_mode':
+    values.generated_image_storage.credential_mode,
+  'generated_image_storage.ecs_ram_role_name':
+    values.generated_image_storage.ecs_ram_role_name ?? '',
+  'generated_image_storage.bucket': values.generated_image_storage.bucket ?? '',
+  'generated_image_storage.region': values.generated_image_storage.region ?? '',
+  'generated_image_storage.internal_endpoint':
+    values.generated_image_storage.internal_endpoint ?? '',
+  'generated_image_storage.external_endpoint':
+    values.generated_image_storage.external_endpoint ?? '',
+  'generated_image_storage.public_base_url':
+    values.generated_image_storage.public_base_url ?? '',
+  'generated_image_storage.presign_enabled':
+    values.generated_image_storage.presign_enabled,
+  'generated_image_storage.presign_ttl_seconds':
+    values.generated_image_storage.presign_ttl_seconds,
+  'generated_image_storage.object_prefix':
+    values.generated_image_storage.object_prefix ?? 'gemini/generated',
+  'generated_image_storage.threshold_mb':
+    values.generated_image_storage.threshold_mb,
+  'generated_image_storage.max_image_mb':
+    values.generated_image_storage.max_image_mb,
+  'generated_image_storage.max_total_mb':
+    values.generated_image_storage.max_total_mb,
+  'generated_image_storage.max_upload_concurrency':
+    values.generated_image_storage.max_upload_concurrency,
+  'generated_image_storage.upload_timeout_seconds':
+    values.generated_image_storage.upload_timeout_seconds,
+  'generated_image_storage.failure_policy':
+    values.generated_image_storage.failure_policy,
 })
 
 function formatBytes(bytes: number, decimals = 2): string {
@@ -285,6 +394,15 @@ export function PerformanceSection(props: Props) {
 
   const diskEnabled = form.watch('performance_setting.disk_cache_enabled')
   const monitorEnabled = form.watch('performance_setting.monitor_enabled')
+  const generatedImageStorageEnabled = form.watch(
+    'generated_image_storage.enabled'
+  )
+  const generatedImageCredentialMode = form.watch(
+    'generated_image_storage.credential_mode'
+  )
+  const generatedImagePresignEnabled = form.watch(
+    'generated_image_storage.presign_enabled'
+  )
   const maxCacheSizeRaw = form.watch(
     'performance_setting.disk_cache_max_size_mb'
   )
@@ -431,6 +549,438 @@ export function PerformanceSection(props: Props) {
               )}
             />
           )}
+
+          <Separator />
+
+          {/* Generated Image Object Storage */}
+          <div>
+            <h4 className='font-medium'>
+              {t('Generated Image Object Storage')}
+            </h4>
+            <p className='text-muted-foreground mt-1 text-xs'>
+              {t(
+                'Store large Gemini inlineData images in object storage and return fileData links to reduce API response bandwidth.'
+              )}
+            </p>
+          </div>
+
+          <Alert>
+            <AlertDescription>
+              {t(
+                'Access keys are read from environment variables or ECS RAM role credentials and are not stored in system settings.'
+              )}
+            </AlertDescription>
+          </Alert>
+
+          <div className='grid grid-cols-1 gap-4 md:grid-cols-4'>
+            <FormField
+              control={form.control}
+              name='generated_image_storage.enabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Enable Generated Image Storage')}</FormLabel>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </SettingsSwitchItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='generated_image_storage.credential_mode'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Credential Mode')}</FormLabel>
+                  <FormControl>
+                    <Select
+                      items={[
+                        { value: 'env', label: t('Environment variables') },
+                        { value: 'ecs_ram_role', label: t('ECS RAM role') },
+                      ]}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      disabled={!generatedImageStorageEnabled}
+                    >
+                      <SelectTrigger className='w-full'>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          <SelectItem value='env'>
+                            {t('Environment variables')}
+                          </SelectItem>
+                          <SelectItem value='ecs_ram_role'>
+                            {t('ECS RAM role')}
+                          </SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='generated_image_storage.ecs_ram_role_name'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('ECS RAM Role Name')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      value={field.value ?? ''}
+                      onChange={(event) => field.onChange(event.target.value)}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      ref={field.ref}
+                      disabled={
+                        !generatedImageStorageEnabled ||
+                        generatedImageCredentialMode !== 'ecs_ram_role'
+                      }
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t('Required only when using ECS RAM role credentials')}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='generated_image_storage.failure_policy'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Failure Policy')}</FormLabel>
+                  <FormControl>
+                    <Select
+                      items={[
+                        {
+                          value: 'fallback_inline',
+                          label: t('Fallback to inlineData'),
+                        },
+                        { value: 'fail_request', label: t('Fail request') },
+                      ]}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      disabled={!generatedImageStorageEnabled}
+                    >
+                      <SelectTrigger className='w-full'>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          <SelectItem value='fallback_inline'>
+                            {t('Fallback to inlineData')}
+                          </SelectItem>
+                          <SelectItem value='fail_request'>
+                            {t('Fail request')}
+                          </SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className='grid grid-cols-1 gap-4 md:grid-cols-3'>
+            <FormField
+              control={form.control}
+              name='generated_image_storage.bucket'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Bucket')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      value={field.value ?? ''}
+                      onChange={(event) => field.onChange(event.target.value)}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      ref={field.ref}
+                      disabled={!generatedImageStorageEnabled}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='generated_image_storage.region'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Region')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder='cn-guangzhou'
+                      value={field.value ?? ''}
+                      onChange={(event) => field.onChange(event.target.value)}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      ref={field.ref}
+                      disabled={!generatedImageStorageEnabled}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='generated_image_storage.object_prefix'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Object Prefix')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      value={field.value ?? ''}
+                      onChange={(event) => field.onChange(event.target.value)}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      ref={field.ref}
+                      disabled={!generatedImageStorageEnabled}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className='grid grid-cols-1 gap-4 md:grid-cols-3'>
+            <FormField
+              control={form.control}
+              name='generated_image_storage.internal_endpoint'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Internal Endpoint')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder='oss-cn-guangzhou-internal.aliyuncs.com'
+                      value={field.value ?? ''}
+                      onChange={(event) => field.onChange(event.target.value)}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      ref={field.ref}
+                      disabled={!generatedImageStorageEnabled}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t('Optional, derived from region when empty')}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='generated_image_storage.external_endpoint'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('External Endpoint')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder='oss-cn-guangzhou.aliyuncs.com'
+                      value={field.value ?? ''}
+                      onChange={(event) => field.onChange(event.target.value)}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      ref={field.ref}
+                      disabled={!generatedImageStorageEnabled}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t('Optional, derived from region when empty')}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='generated_image_storage.public_base_url'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Public Base URL')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder='https://cdn.example.com'
+                      value={field.value ?? ''}
+                      onChange={(event) => field.onChange(event.target.value)}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      ref={field.ref}
+                      disabled={!generatedImageStorageEnabled}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Use a CDN or public bucket URL when available; otherwise private buckets should use presigned URLs.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className='grid grid-cols-1 gap-4 md:grid-cols-4'>
+            <FormField
+              control={form.control}
+              name='generated_image_storage.threshold_mb'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Threshold (MB)')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={1}
+                      step={1}
+                      {...safeNumberFieldProps(field)}
+                      disabled={!generatedImageStorageEnabled}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Only images larger than this decoded size are uploaded'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='generated_image_storage.max_image_mb'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Max Image Size (MB)')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={1}
+                      step={1}
+                      {...safeNumberFieldProps(field)}
+                      disabled={!generatedImageStorageEnabled}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='generated_image_storage.max_total_mb'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Max Total Size (MB)')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={1}
+                      step={1}
+                      {...safeNumberFieldProps(field)}
+                      disabled={!generatedImageStorageEnabled}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='generated_image_storage.max_upload_concurrency'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Upload Concurrency')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={1}
+                      max={16}
+                      step={1}
+                      {...safeNumberFieldProps(field)}
+                      disabled={!generatedImageStorageEnabled}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className='grid grid-cols-1 gap-4 md:grid-cols-3'>
+            <FormField
+              control={form.control}
+              name='generated_image_storage.upload_timeout_seconds'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Upload Timeout (seconds)')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={1}
+                      max={600}
+                      step={1}
+                      {...safeNumberFieldProps(field)}
+                      disabled={!generatedImageStorageEnabled}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='generated_image_storage.presign_enabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Use Presigned URLs')}</FormLabel>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={!generatedImageStorageEnabled}
+                    />
+                  </FormControl>
+                </SettingsSwitchItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='generated_image_storage.presign_ttl_seconds'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Presign TTL (seconds)')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={1}
+                      max={604800}
+                      step={1}
+                      {...safeNumberFieldProps(field)}
+                      disabled={
+                        !generatedImageStorageEnabled ||
+                        !generatedImagePresignEnabled
+                      }
+                    />
+                  </FormControl>
+                  <FormDescription>{t('Up to 604800 seconds')}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
           <Separator />
 
