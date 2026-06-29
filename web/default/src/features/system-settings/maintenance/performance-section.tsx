@@ -105,7 +105,7 @@ const perfSchema = z.object({
     threshold_mb: z.coerce.number().min(1),
     max_image_mb: z.coerce.number().min(1),
     max_total_mb: z.coerce.number().min(1),
-    max_upload_concurrency: z.coerce.number().min(1).max(16),
+    max_upload_concurrency: z.coerce.number().min(1),
     upload_timeout_seconds: z.coerce.number().min(1).max(600),
     failure_policy: z.enum(['fallback_inline', 'fail_request']),
   }),
@@ -905,7 +905,6 @@ export function PerformanceSection(props: Props) {
                     <Input
                       type='number'
                       min={1}
-                      max={16}
                       step={1}
                       {...safeNumberFieldProps(field)}
                       disabled={!generatedImageStorageEnabled}
