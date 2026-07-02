@@ -6,7 +6,6 @@
 #
 # ⚠️  IMPORTANT: Change all default passwords before deploying to production!
 
-version: '3.4'
 
 services:
   new-api:
@@ -27,6 +26,12 @@ services:
       - REDIS_CONN_STRING=redis://redis:6379
       - SESSION_SECRET=t2nPmYK6dLcttPBc
       - TZ=Asia/Shanghai
+      - RELAY_TIMEOUT=${RELAY_TIMEOUT:-450}
+      - RELAY_IDLE_CONN_TIMEOUT=${RELAY_IDLE_CONN_TIMEOUT:-90}
+      - RELAY_MAX_IDLE_CONNS=${RELAY_MAX_IDLE_CONNS:-500}
+      - RELAY_MAX_IDLE_CONNS_PER_HOST=${RELAY_MAX_IDLE_CONNS_PER_HOST:-100}
+      - ENABLE_PPROF=true
+      - GEMINI_IMAGE_TRACE_ENABLED=${GEMINI_IMAGE_TRACE_ENABLED:-false}
     depends_on:
       - redis
       - mysql

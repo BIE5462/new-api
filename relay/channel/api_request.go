@@ -514,14 +514,27 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		}
 	}
 
+	upstreamStartedAt := time.Now()
+	common.GeminiImageTrace(c, info, "upstream_http_start", time.Time{},
+		"method", req.Method,
+		"url_path", req.URL.Path,
+		"content_length", req.ContentLength,
+	)
 	resp, err := client.Do(req)
 	if err != nil {
+		common.GeminiImageTrace(c, info, "upstream_http_failed", upstreamStartedAt, "error", err.Error())
 		logger.LogError(c, "do request failed: "+err.Error())
 		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithHideErrMsg("upstream error: do request failed"))
 	}
 	if resp == nil {
+		common.GeminiImageTrace(c, info, "upstream_http_failed", upstreamStartedAt, "error", "resp is nil")
 		return nil, errors.New("resp is nil")
 	}
+	common.GeminiImageTrace(c, info, "upstream_http_done", upstreamStartedAt,
+		"status", resp.StatusCode,
+		"content_length", resp.ContentLength,
+		"content_type", resp.Header.Get("Content-Type"),
+	)
 
 	if upID := resp.Header.Get(common2.RequestIdKey); upID != "" {
 		c.Set(common2.UpstreamRequestIdKey, upID)

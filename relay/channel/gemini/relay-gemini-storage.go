@@ -35,10 +35,20 @@ var uploadGeneratedImage = service.UploadGeneratedImage
 func offloadGeminiInlineImages(c *gin.Context, info *relaycommon.RelayInfo, response *dto.GeminiChatResponse) (bool, error) {
 	cfg := system_setting.GetGeneratedImageStorageSettings().Normalized()
 	if !cfg.Enabled || response == nil {
+		relaycommon.GeminiImageTrace(c, info, "inline_image_offload_skipped", time.Time{},
+			"storage_enabled", cfg.Enabled,
+			"response_nil", response == nil,
+		)
 		return false, nil
 	}
 
 	startedAt := time.Now()
+	relaycommon.GeminiImageTrace(c, info, "inline_image_scan_start", time.Time{},
+		"threshold_mb", cfg.ThresholdMB,
+		"max_image_mb", cfg.MaxImageMB,
+		"max_total_mb", cfg.MaxTotalMB,
+		"failure_policy", cfg.FailurePolicy,
+	)
 	thresholdBytes := generatedImageMegabytesToBytes(cfg.ThresholdMB)
 	maxImageBytes := generatedImageMegabytesToBytes(cfg.MaxImageMB)
 	maxTotalBytes := generatedImageMegabytesToBytes(cfg.MaxTotalMB)
@@ -105,9 +115,21 @@ func offloadGeminiInlineImages(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	if len(tasks) == 0 {
+		relaycommon.GeminiImageTrace(c, info, "inline_image_scan_done", startedAt,
+			"inline_images", inlineImageCount,
+			"eligible", 0,
+			"skipped", skippedCount,
+			"eligible_bytes", eligibleBytes,
+		)
 		logger.LogDebug(c, "Gemini generated image storage summary: inline_images=%d eligible=0 skipped=%d duration_ms=%d", inlineImageCount, skippedCount, time.Since(startedAt).Milliseconds())
 		return false, nil
 	}
+	relaycommon.GeminiImageTrace(c, info, "inline_image_scan_done", startedAt,
+		"inline_images", inlineImageCount,
+		"eligible", len(tasks),
+		"skipped", skippedCount,
+		"eligible_bytes", eligibleBytes,
+	)
 
 	uploadCtx := context.Background()
 	if c != nil && c.Request != nil {
@@ -129,9 +151,29 @@ func offloadGeminiInlineImages(c *gin.Context, info *relaycommon.RelayInfo, resp
 					PartIndex:      task.partIndex,
 					MimeType:       task.mimeType,
 				}
+				taskStartedAt := time.Now()
+				relaycommon.GeminiImageTrace(c, info, "oss_upload_start", time.Time{},
+					"candidate", task.candidateIndex,
+					"part", task.partIndex,
+					"estimated_bytes", task.estimatedBytes,
+					"mime_type", task.mimeType,
+				)
 				task.url, task.key, task.decodedBytes, task.err = uploadGeneratedImage(uploadCtx, meta, task.data)
 				if task.err != nil {
+					relaycommon.GeminiImageTrace(c, info, "oss_upload_failed", taskStartedAt,
+						"candidate", task.candidateIndex,
+						"part", task.partIndex,
+						"estimated_bytes", task.estimatedBytes,
+						"error", task.err.Error(),
+					)
 					cancelUpload()
+				} else {
+					relaycommon.GeminiImageTrace(c, info, "oss_upload_done", taskStartedAt,
+						"candidate", task.candidateIndex,
+						"part", task.partIndex,
+						"bytes", task.decodedBytes,
+						"key", summarizeGeneratedImageObjectKey(task.key),
+					)
 				}
 			}(task)
 		}
@@ -148,7 +190,29 @@ func offloadGeminiInlineImages(c *gin.Context, info *relaycommon.RelayInfo, resp
 					PartIndex:      task.partIndex,
 					MimeType:       task.mimeType,
 				}
+				taskStartedAt := time.Now()
+				relaycommon.GeminiImageTrace(c, info, "oss_upload_start", time.Time{},
+					"candidate", task.candidateIndex,
+					"part", task.partIndex,
+					"estimated_bytes", task.estimatedBytes,
+					"mime_type", task.mimeType,
+				)
 				task.url, task.key, task.decodedBytes, task.err = uploadGeneratedImage(uploadCtx, meta, task.data)
+				if task.err != nil {
+					relaycommon.GeminiImageTrace(c, info, "oss_upload_failed", taskStartedAt,
+						"candidate", task.candidateIndex,
+						"part", task.partIndex,
+						"estimated_bytes", task.estimatedBytes,
+						"error", task.err.Error(),
+					)
+				} else {
+					relaycommon.GeminiImageTrace(c, info, "oss_upload_done", taskStartedAt,
+						"candidate", task.candidateIndex,
+						"part", task.partIndex,
+						"bytes", task.decodedBytes,
+						"key", summarizeGeneratedImageObjectKey(task.key),
+					)
+				}
 			}(task)
 		}
 		wg.Wait()
@@ -171,12 +235,24 @@ func offloadGeminiInlineImages(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	if failRequest && firstErr != nil {
+		relaycommon.GeminiImageTrace(c, info, "inline_image_offload_failed", startedAt,
+			"uploaded", uploadedCount,
+			"failed", failedCount,
+			"error", firstErr.Error(),
+		)
 		return false, fmt.Errorf("upload generated Gemini inline image failed: %w", firstErr)
 	}
 
+	rewriteStartedAt := time.Now()
 	changed := false
 	for _, task := range tasks {
 		if task.err != nil {
+			relaycommon.GeminiImageTrace(c, info, "inline_image_upload_fallback", time.Time{},
+				"candidate", task.candidateIndex,
+				"part", task.partIndex,
+				"estimated_bytes", task.estimatedBytes,
+				"error", task.err.Error(),
+			)
 			logger.LogWarn(c, fmt.Sprintf(
 				"Gemini generated image storage upload failed, fallback inline: candidate=%d part=%d estimated_bytes=%d err=%v",
 				task.candidateIndex,
@@ -194,6 +270,11 @@ func offloadGeminiInlineImages(c *gin.Context, info *relaycommon.RelayInfo, resp
 		changed = true
 		logger.LogDebug(c, "Gemini generated image stored: candidate=%d part=%d bytes=%d key=%s", task.candidateIndex, task.partIndex, task.decodedBytes, summarizeGeneratedImageObjectKey(task.key))
 	}
+	relaycommon.GeminiImageTrace(c, info, "inline_image_parts_rewrite_done", rewriteStartedAt,
+		"changed", changed,
+		"uploaded", uploadedCount,
+		"failed", failedCount,
+	)
 
 	logger.LogDebug(
 		c,

@@ -174,6 +174,84 @@ func TestGeminiTextGenerationHandlerPromptTokensIncludeToolUsePromptTokens(t *te
 	require.Equal(t, 1120, usage.CompletionTokenDetails.ReasoningTokens)
 }
 
+func TestGeminiTextGenerationHandlerReturnsErrorForPromptBlocked(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-3-flash-preview:generateContent", nil)
+
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gemini-3-flash-preview",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "gemini-3-flash-preview",
+		},
+	}
+
+	blockReason := "SAFETY"
+	payload := dto.GeminiChatResponse{
+		PromptFeedback: &dto.GeminiChatPromptFeedback{
+			BlockReason: &blockReason,
+		},
+		UsageMetadata: dto.GeminiUsageMetadata{
+			PromptTokenCount: 3,
+			TotalTokenCount:  3,
+		},
+	}
+
+	body, err := common.Marshal(payload)
+	require.NoError(t, err)
+
+	resp := &http.Response{
+		Body: io.NopCloser(bytes.NewReader(body)),
+	}
+
+	usage, newAPIError := GeminiTextGenerationHandler(c, info, resp)
+	require.NotNil(t, newAPIError)
+	require.NotNil(t, usage)
+	require.Equal(t, types.ErrorCodePromptBlocked, newAPIError.GetErrorCode())
+	require.Equal(t, http.StatusBadRequest, newAPIError.StatusCode)
+	require.Equal(t, 3, usage.TotalTokens)
+	require.Equal(t, "gemini_block_reason=SAFETY", common.GetContextKeyString(c, constant.ContextKeyAdminRejectReason))
+}
+
+func TestGeminiTextGenerationHandlerReturnsErrorForEmptyCandidates(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-3-flash-preview:generateContent", nil)
+
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gemini-3-flash-preview",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "gemini-3-flash-preview",
+		},
+	}
+
+	payload := dto.GeminiChatResponse{
+		UsageMetadata: dto.GeminiUsageMetadata{
+			PromptTokenCount: 4,
+			TotalTokenCount:  4,
+		},
+	}
+
+	body, err := common.Marshal(payload)
+	require.NoError(t, err)
+
+	resp := &http.Response{
+		Body: io.NopCloser(bytes.NewReader(body)),
+	}
+
+	usage, newAPIError := GeminiTextGenerationHandler(c, info, resp)
+	require.NotNil(t, newAPIError)
+	require.NotNil(t, usage)
+	require.Equal(t, types.ErrorCodeEmptyResponse, newAPIError.GetErrorCode())
+	require.Equal(t, http.StatusInternalServerError, newAPIError.StatusCode)
+	require.Equal(t, 4, usage.TotalTokens)
+	require.Equal(t, "gemini_empty_candidates", common.GetContextKeyString(c, constant.ContextKeyAdminRejectReason))
+}
+
 func TestGeminiChatHandlerUsesEstimatedPromptTokensWhenUsagePromptMissing(t *testing.T) {
 	t.Parallel()
 

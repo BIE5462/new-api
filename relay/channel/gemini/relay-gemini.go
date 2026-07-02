@@ -1502,19 +1502,31 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 }
 
 func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+	readStartedAt := time.Now()
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
+		relaycommon.GeminiImageTrace(c, info, "upstream_body_read_failed", readStartedAt, "error", err.Error())
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 	service.CloseResponseBodyGracefully(resp)
+	relaycommon.GeminiImageTrace(c, info, "upstream_body_read_done", readStartedAt,
+		"body_bytes", len(responseBody),
+	)
 
+	parseStartedAt := time.Now()
 	var geminiResponse dto.GeminiChatResponse
 	err = common.Unmarshal(responseBody, &geminiResponse)
 	if err != nil {
+		relaycommon.GeminiImageTrace(c, info, "upstream_response_parse_failed", parseStartedAt, "error", err.Error())
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 
 	inlineImageCount, inlineBase64Chars, textPreview := geminiResponseDebugSummary(&geminiResponse)
+	relaycommon.GeminiImageTrace(c, info, "upstream_response_parse_done", parseStartedAt,
+		"candidates", len(geminiResponse.Candidates),
+		"inline_images", inlineImageCount,
+		"inline_base64_chars", inlineBase64Chars,
+	)
 	logger.LogDebug(c, "Gemini response summary: body_bytes=%d candidates=%d inline_images=%d inline_base64_chars=%d text_preview=%q", len(responseBody), len(geminiResponse.Candidates), inlineImageCount, inlineBase64Chars, textPreview)
 
 	if len(geminiResponse.Candidates) == 0 {
@@ -1522,6 +1534,9 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 
 		var newAPIError *types.NewAPIError
 		if geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
+			relaycommon.GeminiImageTrace(c, info, "upstream_generation_empty", time.Time{},
+				"block_reason", *geminiResponse.PromptFeedback.BlockReason,
+			)
 			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, fmt.Sprintf("gemini_block_reason=%s", *geminiResponse.PromptFeedback.BlockReason))
 			newAPIError = types.NewOpenAIError(
 				errors.New("request blocked by Gemini API: "+*geminiResponse.PromptFeedback.BlockReason),
@@ -1529,6 +1544,7 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 				http.StatusBadRequest,
 			)
 		} else {
+			relaycommon.GeminiImageTrace(c, info, "upstream_generation_empty", time.Time{})
 			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "gemini_empty_candidates")
 			newAPIError = types.NewOpenAIError(
 				errors.New("empty response from Gemini API"),
@@ -1553,6 +1569,11 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 		return &usage, nil
 	}
 
+	relaycommon.GeminiImageTrace(c, info, "upstream_generation_success", time.Time{},
+		"candidates", len(geminiResponse.Candidates),
+		"inline_images", inlineImageCount,
+		"inline_base64_chars", inlineBase64Chars,
+	)
 	usage := buildUsageFromGeminiMetadata(geminiResponse.UsageMetadata, info.GetEstimatePromptTokens())
 
 	switch info.RelayFormat {
@@ -1575,19 +1596,31 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 		}
 		responseBody = claudeRespStr
 	case types.RelayFormatGemini:
+		offloadStartedAt := time.Now()
 		changed, err := offloadGeminiInlineImages(c, info, &geminiResponse)
 		if err != nil {
+			relaycommon.GeminiImageTrace(c, info, "inline_image_offload_failed", offloadStartedAt, "error", err.Error())
 			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 		}
+		relaycommon.GeminiImageTrace(c, info, "inline_image_offload_done", offloadStartedAt, "changed", changed)
 		if changed {
+			marshalStartedAt := time.Now()
 			responseBody, err = common.Marshal(geminiResponse)
 			if err != nil {
+				relaycommon.GeminiImageTrace(c, info, "response_rewrite_failed", marshalStartedAt, "error", err.Error())
 				return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 			}
+			relaycommon.GeminiImageTrace(c, info, "response_rewrite_done", marshalStartedAt,
+				"body_bytes", len(responseBody),
+			)
 		}
 	}
 
+	writeStartedAt := time.Now()
 	service.IOCopyBytesGracefully(c, resp, responseBody)
+	relaycommon.GeminiImageTrace(c, info, "downstream_body_write_done", writeStartedAt,
+		"body_bytes", len(responseBody),
+	)
 
 	return &usage, nil
 }
@@ -1638,20 +1671,34 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 }
 
 func GeminiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+	readStartedAt := time.Now()
 	responseBody, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
+		relaycommon.GeminiImageTrace(c, info, "upstream_body_read_failed", readStartedAt, "error", readErr.Error())
 		return nil, types.NewOpenAIError(readErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 	_ = resp.Body.Close()
+	relaycommon.GeminiImageTrace(c, info, "upstream_body_read_done", readStartedAt,
+		"body_bytes", len(responseBody),
+	)
 
+	parseStartedAt := time.Now()
 	var geminiResponse dto.GeminiImageResponse
 	if jsonErr := common.Unmarshal(responseBody, &geminiResponse); jsonErr != nil {
+		relaycommon.GeminiImageTrace(c, info, "upstream_response_parse_failed", parseStartedAt, "error", jsonErr.Error())
 		return nil, types.NewOpenAIError(jsonErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+	relaycommon.GeminiImageTrace(c, info, "upstream_response_parse_done", parseStartedAt,
+		"predictions", len(geminiResponse.Predictions),
+	)
 
 	if len(geminiResponse.Predictions) == 0 {
+		relaycommon.GeminiImageTrace(c, info, "upstream_generation_empty", time.Time{})
 		return nil, types.NewOpenAIError(errors.New("no images generated"), types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+	relaycommon.GeminiImageTrace(c, info, "upstream_generation_success", time.Time{},
+		"predictions", len(geminiResponse.Predictions),
+	)
 
 	// convert to openai format response
 	openAIResponse := dto.ImageResponse{
@@ -1675,7 +1722,12 @@ func GeminiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(resp.StatusCode)
+	writeStartedAt := time.Now()
 	_, _ = c.Writer.Write(jsonResponse)
+	relaycommon.GeminiImageTrace(c, info, "downstream_body_write_done", writeStartedAt,
+		"body_bytes", len(jsonResponse),
+		"images", len(openAIResponse.Data),
+	)
 
 	// https://github.com/google-gemini/cookbook/blob/719a27d752aac33f39de18a8d3cb42a70874917e/quickstarts/Counting_Tokens.ipynb
 	// each image has fixed 258 tokens

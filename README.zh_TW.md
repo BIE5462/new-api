@@ -321,6 +321,7 @@ docker run --name new-api -d --restart always \
 | `MAX_REQUEST_BODY_MB` | 請求體最大大小（MB，**解壓縮後**計；防止超大請求/zip bomb 導致記憶體暴漲），超過將返回 `413` | `32` |
 | `AZURE_DEFAULT_API_VERSION` | Azure API 版本                                                 | `2025-04-01-preview` |
 | `ERROR_LOG_ENABLED` | 錯誤日誌開關                                                       | `false` |
+| `GEMINI_IMAGE_TRACE_ENABLED` | Gemini 圖像調用詳細鏈路日誌開關，用於記錄接收請求、轉發上游、解析上游回應、生成圖轉存和返回下游等階段耗時 | `false` |
 | `PYROSCOPE_URL` | Pyroscope 服務位址                                            | - |
 | `PYROSCOPE_APP_NAME` | Pyroscope 應用名                                        | `new-api` |
 | `PYROSCOPE_BASIC_AUTH_USER` | Pyroscope Basic Auth 用戶名                        | - |

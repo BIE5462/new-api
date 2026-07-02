@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -37,6 +38,11 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
+	relaycommon.GeminiImageTrace(c, info, "request_received", time.Time{},
+		"method", c.Request.Method,
+		"path", c.Request.URL.Path,
+		"content_length", c.Request.ContentLength,
+	)
 
 	adaptor := GetAdaptor(info.ApiType)
 	if adaptor == nil {
@@ -90,14 +96,25 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
+	upstreamStartedAt := time.Now()
+	relaycommon.GeminiImageTrace(c, info, "upstream_forward_start", time.Time{},
+		"request_body_bytes", info.UpstreamRequestBodySize,
+	)
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
+		relaycommon.GeminiImageTrace(c, info, "upstream_forward_failed", upstreamStartedAt, "error", err.Error())
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
 	}
+	relaycommon.GeminiImageTrace(c, info, "upstream_forward_done", upstreamStartedAt)
 	var httpResp *http.Response
 	if resp != nil {
 		httpResp = resp.(*http.Response)
 		info.IsStream = info.IsStream || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
+		relaycommon.GeminiImageTrace(c, info, "upstream_response_received", time.Time{},
+			"status", httpResp.StatusCode,
+			"content_length", httpResp.ContentLength,
+			"content_type", httpResp.Header.Get("Content-Type"),
+		)
 		if httpResp.StatusCode != http.StatusOK {
 			if httpResp.StatusCode == http.StatusCreated && info.ApiType == constant.APITypeReplicate {
 				// replicate channel returns 201 Created when using Prefer: wait, treat it as success.
@@ -158,5 +175,8 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	}
 
 	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), logContent)
+	relaycommon.GeminiImageTrace(c, info, "return_to_user_done", time.Time{},
+		"response_count", info.SendResponseCount,
+	)
 	return nil
 }

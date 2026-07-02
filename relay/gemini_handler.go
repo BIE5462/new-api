@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -69,6 +70,11 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
+	relaycommon.GeminiImageTrace(c, info, "request_received", time.Time{},
+		"method", c.Request.Method,
+		"path", c.Request.URL.Path,
+		"content_length", c.Request.ContentLength,
+	)
 
 	if model_setting.GetGeminiSettings().ThinkingAdapterEnabled {
 		if isNoThinkingRequest(request) {
@@ -174,11 +180,17 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		requestBody = body
 	}
 
+	upstreamStartedAt := time.Now()
+	relaycommon.GeminiImageTrace(c, info, "upstream_forward_start", time.Time{},
+		"request_body_bytes", info.UpstreamRequestBodySize,
+	)
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
+		relaycommon.GeminiImageTrace(c, info, "upstream_forward_failed", upstreamStartedAt, "error", err.Error())
 		logger.LogError(c, "Do gemini request failed: "+err.Error())
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
 	}
+	relaycommon.GeminiImageTrace(c, info, "upstream_forward_done", upstreamStartedAt)
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
@@ -186,6 +198,11 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	if resp != nil {
 		httpResp = resp.(*http.Response)
 		info.IsStream = info.IsStream || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
+		relaycommon.GeminiImageTrace(c, info, "upstream_response_received", time.Time{},
+			"status", httpResp.StatusCode,
+			"content_length", httpResp.ContentLength,
+			"content_type", httpResp.Header.Get("Content-Type"),
+		)
 		if httpResp.StatusCode != http.StatusOK {
 			newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
 			// reset status code 重置状态码
@@ -201,6 +218,9 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	}
 
 	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
+	relaycommon.GeminiImageTrace(c, info, "return_to_user_done", time.Time{},
+		"response_count", info.SendResponseCount,
+	)
 	return nil
 }
 
