@@ -13,6 +13,8 @@ const (
 
 	TaskActionGenerate          = "generate"
 	TaskActionTextGenerate      = "textGenerate"
+	TaskActionOmniVideo         = "omniVideo"
+	TaskActionMotionControl     = "motionControl"
 	TaskActionFirstTailGenerate = "firstTailGenerate"
 	TaskActionReferenceGenerate = "referenceGenerate"
 	TaskActionRemix             = "remixGenerate"
