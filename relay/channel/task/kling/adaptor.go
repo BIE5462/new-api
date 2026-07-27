@@ -246,11 +246,25 @@ func (a *TaskAdaptor) ResolveTaskPrice(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return types.PriceData{}, service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 	}
+	hasReferenceVideo := false
+	var pricePerSecond float64
+	var ok bool
+	if isKlingOmniModel(modelName) {
+		hasReferenceVideo = hasKlingReferenceVideo(req.Metadata)
+		pricePerSecond, ok = model_setting.GetKlingPrice(modelName, mode, sound, hasReferenceVideo)
+	} else {
+		pricePerSecond, ok = model_setting.GetKlingPrice(modelName, mode, sound)
+	}
 
-	pricePerSecond, ok := model_setting.GetKlingPrice(modelName, mode, sound)
 	if !ok {
 		return types.PriceData{}, service.TaskErrorWrapperLocal(
-			fmt.Errorf("kling price not configured: model=%s, mode=%s, sound=%s", modelName, mode, sound),
+			fmt.Errorf(
+				"kling price not configured: model=%s, mode=%s, sound=%s, has_reference_video=%t",
+				modelName,
+				mode,
+				sound,
+				hasReferenceVideo,
+			),
 			"model_price_error",
 			http.StatusBadRequest,
 		)
@@ -274,10 +288,11 @@ func (a *TaskAdaptor) ResolveTaskPrice(c *gin.Context, info *relaycommon.RelayIn
 		Quota:          quota,
 		GroupRatioInfo: groupRatioInfo,
 		BillingDetails: map[string]interface{}{
-			"price_per_second": pricePerSecond,
-			"duration_seconds": durationSeconds,
-			"kling_mode":       mode,
-			"kling_sound":      sound,
+			"price_per_second":    pricePerSecond,
+			"duration_seconds":    durationSeconds,
+			"kling_mode":          mode,
+			"kling_sound":         sound,
+			"has_reference_video": hasReferenceVideo,
 		},
 	}, nil
 }
@@ -801,6 +816,30 @@ func hasKlingBaseVideo(videoList any) bool {
 		referType, _ := video["refer_type"].(string)
 		switch strings.ToLower(strings.TrimSpace(referType)) {
 		case "base", "video_editing", "video-editing":
+			return true
+		}
+	}
+	return false
+}
+
+func hasKlingReferenceVideo(metadata map[string]interface{}) bool {
+	if metadata == nil {
+		return false
+	}
+	if hasKlingReferenceVideoList(metadata["video_list"]) {
+		return true
+	}
+	nestedMetadata := normalizeKlingObject(metadata["metadata"])
+	if nestedMetadata == nil {
+		return false
+	}
+	return hasKlingReferenceVideoList(nestedMetadata["video_list"])
+}
+
+func hasKlingReferenceVideoList(videoList any) bool {
+	videos := normalizeKlingObjectList(videoList)
+	for _, video := range videos {
+		if firstStringMapValue(video, "video_url", "url", "video") != "" {
 			return true
 		}
 	}

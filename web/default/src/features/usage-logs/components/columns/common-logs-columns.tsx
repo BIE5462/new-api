@@ -1,3 +1,5 @@
+import type { ColumnDef } from '@tanstack/react-table'
+import { CircleAlert, GitBranch, Sparkles, KeyRound } from 'lucide-react'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -17,17 +19,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
-import { type ColumnDef } from '@tanstack/react-table'
-import { CircleAlert, GitBranch, Sparkles, KeyRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
-import { formatBillingCurrencyFromUSD } from '@/lib/currency'
-import {
-  formatUseTime,
-  formatLogQuota,
-  formatTimestampToDate,
-} from '@/lib/format'
-import { cn } from '@/lib/utils'
+
+import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   Popover,
@@ -40,7 +34,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
+import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
+import { formatBillingCurrencyFromUSD } from '@/lib/currency'
+import {
+  formatUseTime,
+  formatLogQuota,
+  formatTimestampToDate,
+} from '@/lib/format'
+import { cn } from '@/lib/utils'
+
 import { LOG_TYPE_ALL_VALUE } from '../../constants'
 import type { UsageLog } from '../../data/schema'
 import {
@@ -51,7 +53,7 @@ import {
   hasAnyCacheTokens,
   parseLogOther,
   isViolationFeeLog,
-  renderAuditContent,
+  renderLocalizedLogContent,
 } from '../../lib/format'
 import {
   isDisplayableLogType,
@@ -109,7 +111,7 @@ function buildDetailSegments(
   // Audit (type=3) and login (type=7) logs: render localized content from the
   // structured op descriptor instead of the raw (English-fallback) content.
   if (log.type === 3 || log.type === 7) {
-    const text = renderAuditContent(other, t)
+    const text = renderLocalizedLogContent(log, other, t)
     return text ? [{ text }] : []
   }
 
@@ -206,8 +208,9 @@ function buildDetailSegments(
   } else {
     const isPerCall = isPerCallBilling(other.model_price)
     if (isPerCall) {
+      const modelPrice = other.model_price ?? 0
       segments.push({
-        text: `${t('Per-call')} · ${formatBillingCurrencyFromUSD(other.model_price!, priceOpts)}`,
+        text: `${t('Per-call')} · ${formatBillingCurrencyFromUSD(modelPrice, priceOpts)}`,
       })
     } else if (other.model_ratio != null) {
       const inputPriceUSD = other.model_ratio * 2.0
@@ -328,8 +331,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             ? rawUseChannel.map(String).filter(Boolean)
             : []
           const hasRetryChain = useChannel.length > 1
-          const channelChain =
-            hasRetryChain ? useChannel.join(' → ') : undefined
+          const channelChain = hasRetryChain
+            ? useChannel.join(' → ')
+            : undefined
           const channelDisplay = log.channel_name
             ? `${log.channel_name} #${log.channel}`
             : `#${log.channel}`
@@ -591,7 +595,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           <div className='flex w-fit flex-col gap-0.5'>
             <ModelBadge
               modelName={modelInfo.name}
-              actualModel={modelInfo.actualModel}
+              actualModel={isAdmin ? modelInfo.actualModel : undefined}
             />
           </div>
         )
@@ -682,7 +686,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     <Tooltip>
                       <TooltipTrigger
                         render={<CircleAlert className='size-3 text-red-500' />}
-                      ></TooltipTrigger>
+                      />
                       <TooltipContent>
                         <div className='space-y-0.5 text-xs'>
                           <p>
@@ -817,6 +821,14 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const segments = buildDetailSegments(log, other, t)
         const primary = segments[0]
         const hasMore = segments.length > 1
+        const fallbackContent = renderLocalizedLogContent(log, other, t)
+        let primaryClassName = 'text-foreground'
+        if (primary?.muted) {
+          primaryClassName = 'text-muted-foreground/60'
+        } else if (primary?.danger) {
+          primaryClassName = 'text-red-600 dark:text-red-400'
+        }
+        const preview = primary ? primary.text : fallbackContent
 
         return (
           <>
@@ -826,27 +838,19 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               onClick={() => setDialogOpen(true)}
               title={t('Click to view full details')}
             >
-              {primary ? (
+              {preview ? (
                 <span
                   className={cn(
                     'truncate leading-snug group-hover:underline',
-                    primary.muted
-                      ? 'text-muted-foreground/60'
-                      : primary.danger
-                        ? 'text-red-600 dark:text-red-400'
-                        : 'text-foreground'
+                    primary ? primaryClassName : 'text-muted-foreground'
                   )}
                 >
-                  {primary.text}
+                  {preview}
                   {hasMore && (
                     <span className='text-muted-foreground/40 ml-0.5'>
                       +{segments.length - 1}
                     </span>
                   )}
-                </span>
-              ) : log.content ? (
-                <span className='text-muted-foreground truncate group-hover:underline'>
-                  {log.content}
                 </span>
               ) : (
                 <span className='text-muted-foreground/40'>—</span>

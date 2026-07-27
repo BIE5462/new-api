@@ -606,6 +606,7 @@ func handleConfigUpdate(key, value string) bool {
 		operation_setting.RebuildToolPriceIndex()
 	} else if configName == "kling" {
 		model_setting.RebuildKlingPriceIndex()
+		InvalidatePricingCache()
 	} else if configName == "billing_setting" {
 		InvalidatePricingCache()
 		ratio_setting.InvalidateExposedDataCache()

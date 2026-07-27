@@ -31,3 +31,52 @@ export function getLogOther(otherStr) {
     return null;
   }
 }
+
+const QUOTA_ADJUSTMENT_ACTIONS = new Set([
+  'user.quota_add',
+  'user.quota_subtract',
+  'user.quota_override',
+]);
+
+// Return the structured quota adjustment descriptor, including legacy records
+// that predate the `other.op` audit payload.
+export function getQuotaAdjustment(record) {
+  if (!record) {
+    return null;
+  }
+
+  const other = getLogOther(record.other);
+  const action = other?.op?.action;
+  if (QUOTA_ADJUSTMENT_ACTIONS.has(action)) {
+    return {
+      action,
+      params: other.op.params || {},
+      content: record.content || '',
+    };
+  }
+
+  const content = String(record.content || '');
+  if (
+    /(?:管理员(?:\([^)]*\))?增加用户额度|Increased user quota by)/i.test(
+      content,
+    )
+  ) {
+    return { action: 'user.quota_add', params: {}, content };
+  }
+  if (
+    /(?:管理员(?:\([^)]*\))?减少用户额度|Decreased user quota by)/i.test(
+      content,
+    )
+  ) {
+    return { action: 'user.quota_subtract', params: {}, content };
+  }
+  if (
+    /(?:管理员(?:\([^)]*\))?覆盖用户额度|Overrode user quota from)/i.test(
+      content,
+    )
+  ) {
+    return { action: 'user.quota_override', params: {}, content };
+  }
+
+  return null;
+}

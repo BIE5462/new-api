@@ -28,6 +28,8 @@ import type { LogOtherData } from '../types'
 
 export { normalizeTierLabel }
 
+type TranslationFn = (key: string, opts?: Record<string, unknown>) => string
+
 const PARAM_OVERRIDE_ACTION_MAP: Record<string, string> = {
   set: 'Set',
   delete: 'Delete',
@@ -194,7 +196,7 @@ export function decodeBillingExprB64(exprB64: string | undefined): string {
 
     return decodeURIComponent(
       Array.prototype.map
-        .call(bytes, (byte: number) => '%' + byte.toString(16).padStart(2, '0'))
+        .call(bytes, (byte: number) => `%${byte.toString(16).padStart(2, '0')}`)
         .join('')
     )
   } catch {
@@ -389,6 +391,69 @@ const AUDIT_TEMPLATES: Record<string, string> = {
   generic: '{{method}} {{route}}',
 }
 
+interface LegacyAuditContentPattern {
+  template: string
+  regex: RegExp
+  params: string[]
+}
+
+function escapeRegExp(value: string): string {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function auditTemplateToLegacyPattern(
+  template: string
+): LegacyAuditContentPattern {
+  const params: string[] = []
+  const parts = ['^']
+  const placeholderRegex = /\{\{(\w+)\}\}/g
+  let lastIndex = 0
+  let match = placeholderRegex.exec(template)
+
+  while (match) {
+    parts.push(escapeRegExp(template.slice(lastIndex, match.index)))
+    parts.push('(.*?)')
+    params.push(match[1])
+    lastIndex = match.index + match[0].length
+    match = placeholderRegex.exec(template)
+  }
+
+  parts.push(escapeRegExp(template.slice(lastIndex)))
+  parts.push('$')
+
+  return {
+    template,
+    regex: new RegExp(parts.join('')),
+    params,
+  }
+}
+
+const LEGACY_AUDIT_CONTENT_PATTERNS = Object.entries(AUDIT_TEMPLATES)
+  .filter(([action]) => action !== 'generic')
+  .map(([, template]) => auditTemplateToLegacyPattern(template))
+
+function renderLegacyAuditContent(
+  content: string,
+  t: TranslationFn
+): string | null {
+  const normalizedContent = content.trim()
+  if (!normalizedContent) return null
+
+  for (const pattern of LEGACY_AUDIT_CONTENT_PATTERNS) {
+    const match = pattern.regex.exec(normalizedContent)
+    if (!match) continue
+
+    const params: Record<string, unknown> = {}
+    pattern.params.forEach((name, index) => {
+      params[name] = match[index + 1] ?? ''
+    })
+
+    return t(pattern.template, params)
+  }
+
+  return null
+}
+
 /**
  * Render the localized content of an audit/login log from its structured
  * `other.op` descriptor. Returns null when the log has no recognized action,
@@ -396,11 +461,25 @@ const AUDIT_TEMPLATES: Record<string, string> = {
  */
 export function renderAuditContent(
   other: LogOtherData | null | undefined,
-  t: (key: string, opts?: Record<string, unknown>) => string
+  t: TranslationFn
 ): string | null {
   const op = other?.op
   if (!op?.action) return null
   const template = AUDIT_TEMPLATES[op.action]
   if (!template) return null
   return t(template, (op.params ?? {}) as Record<string, unknown>)
+}
+
+export function renderLocalizedLogContent(
+  log: UsageLog,
+  other: LogOtherData | null | undefined,
+  t: TranslationFn
+): string {
+  const content = log.content ?? ''
+  if (log.type !== 3 && log.type !== 7) return content
+
+  const structuredText = renderAuditContent(other, t)
+  if (structuredText) return structuredText
+
+  return renderLegacyAuditContent(content, t) ?? content
 }

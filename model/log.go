@@ -73,6 +73,7 @@ type Log struct {
 	IsStream          bool   `json:"is_stream"`
 	ChannelId         int    `json:"channel" gorm:"index"`
 	ChannelName       string `json:"channel_name" gorm:"->"`
+	UserRemark        string `json:"user_remark" gorm:"-:all"`
 	TokenId           int    `json:"token_id" gorm:"default:0;index"`
 	Group             string `json:"group" gorm:"index"`
 	Ip                string `json:"ip" gorm:"index;default:''"`
@@ -112,6 +113,35 @@ func assignDisplayLogIds(logs []*Log, startIdx int) {
 	for i := range logs {
 		logs[i].Id = startIdx + i + 1
 	}
+}
+
+func populateLogUserRemarks(logs []*Log) error {
+	userIds := types.NewSet[int]()
+	for _, log := range logs {
+		if log.UserId > 0 {
+			userIds.Add(log.UserId)
+		}
+	}
+	if userIds.Len() == 0 {
+		return nil
+	}
+
+	var users []struct {
+		Id     int    `gorm:"column:id"`
+		Remark string `gorm:"column:remark"`
+	}
+	if err := DB.Model(&User{}).Select("id, remark").Where("id IN ?", userIds.Items()).Find(&users).Error; err != nil {
+		return err
+	}
+
+	remarkMap := make(map[int]string, len(users))
+	for _, user := range users {
+		remarkMap[user.Id] = user.Remark
+	}
+	for i := range logs {
+		logs[i].UserRemark = remarkMap[logs[i].UserId]
+	}
+	return nil
 }
 
 func formatUserLogs(logs []*Log, startIdx int) {
@@ -519,6 +549,9 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	}
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		assignDisplayLogIds(logs, startIdx)
+	}
+	if err = populateLogUserRemarks(logs); err != nil {
+		return logs, total, err
 	}
 
 	channelIds := types.NewSet[int]()

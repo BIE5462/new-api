@@ -353,6 +353,13 @@ func (channel *Channel) SaveWithoutKey() error {
 	return DB.Omit("key").Save(channel).Error
 }
 
+func (channel *Channel) UpdateOtherSettings() error {
+	if channel.Id == 0 {
+		return errors.New("channel ID is 0")
+	}
+	return DB.Model(channel).Update("settings", channel.OtherSettings).Error
+}
+
 func GetAllChannels(startIdx int, num int, selectAll bool, idSort bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
 	var channels []*Channel
 	var err error

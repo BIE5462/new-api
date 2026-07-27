@@ -11,10 +11,11 @@ import (
 const DefaultKlingDurationSeconds = 5
 
 type KlingPriceItem struct {
-	Model          string  `json:"model"`
-	Mode           string  `json:"mode"`
-	Sound          string  `json:"sound"`
-	PricePerSecond float64 `json:"price_per_second"`
+	Model             string  `json:"model"`
+	Mode              string  `json:"mode"`
+	Sound             string  `json:"sound"`
+	HasReferenceVideo *bool   `json:"has_reference_video,omitempty"`
+	PricePerSecond    float64 `json:"price_per_second"`
 }
 
 type KlingSettings struct {
@@ -26,7 +27,8 @@ var klingSettings = KlingSettings{
 }
 
 type klingPriceIndex struct {
-	prices map[string]KlingPriceItem
+	exact    map[string]KlingPriceItem
+	wildcard map[string]KlingPriceItem
 }
 
 var currentKlingPriceIndex atomic.Pointer[klingPriceIndex]
@@ -80,11 +82,16 @@ func klingPriceKey(model string, mode any, sound any) string {
 	return NormalizeKlingModel(model) + "|" + NormalizeKlingMode(mode) + "|" + NormalizeKlingSound(sound)
 }
 
+func klingReferenceVideoPriceKey(model string, mode any, sound any, hasReferenceVideo bool) string {
+	return fmt.Sprintf("%s|ref=%t", klingPriceKey(model, mode, sound), hasReferenceVideo)
+}
+
 // RebuildKlingPriceIndex rebuilds the exact-match lookup table from kling.prices.
 // Duplicate keys are intentionally resolved by the last loaded item.
 func RebuildKlingPriceIndex() {
 	idx := &klingPriceIndex{
-		prices: make(map[string]KlingPriceItem, len(klingSettings.Prices)),
+		exact:    make(map[string]KlingPriceItem, len(klingSettings.Prices)),
+		wildcard: make(map[string]KlingPriceItem, len(klingSettings.Prices)),
 	}
 
 	for _, item := range klingSettings.Prices {
@@ -94,25 +101,69 @@ func RebuildKlingPriceIndex() {
 		if model == "" || mode == "" || sound == "" || item.PricePerSecond < 0 {
 			continue
 		}
-		idx.prices[klingPriceKey(model, mode, sound)] = KlingPriceItem{
-			Model:          model,
-			Mode:           mode,
-			Sound:          sound,
-			PricePerSecond: item.PricePerSecond,
+		hasReferenceVideo := item.HasReferenceVideo
+		if model != "kling-v3-omni" {
+			hasReferenceVideo = nil
 		}
+		normalized := KlingPriceItem{
+			Model:             model,
+			Mode:              mode,
+			Sound:             sound,
+			HasReferenceVideo: hasReferenceVideo,
+			PricePerSecond:    item.PricePerSecond,
+		}
+		if hasReferenceVideo != nil {
+			idx.exact[klingReferenceVideoPriceKey(model, mode, sound, *hasReferenceVideo)] = normalized
+			continue
+		}
+		idx.wildcard[klingPriceKey(model, mode, sound)] = normalized
 	}
 
 	currentKlingPriceIndex.Store(idx)
 }
 
-func GetKlingPrice(model string, mode any, sound any) (float64, bool) {
+func GetKlingPrice(model string, mode any, sound any, hasReferenceVideo ...bool) (float64, bool) {
 	idx := currentKlingPriceIndex.Load()
 	if idx == nil {
 		return 0, false
 	}
-	item, ok := idx.prices[klingPriceKey(model, mode, sound)]
+	if len(hasReferenceVideo) > 0 {
+		item, ok := idx.exact[klingReferenceVideoPriceKey(model, mode, sound, hasReferenceVideo[0])]
+		if ok {
+			return item.PricePerSecond, true
+		}
+	}
+	item, ok := idx.wildcard[klingPriceKey(model, mode, sound)]
 	if !ok {
 		return 0, false
 	}
 	return item.PricePerSecond, true
+}
+
+func GetKlingPricesForModel(model string) []KlingPriceItem {
+	model = NormalizeKlingModel(model)
+	if model == "" {
+		return nil
+	}
+	items := make([]KlingPriceItem, 0)
+	for _, item := range klingSettings.Prices {
+		itemModel := NormalizeKlingModel(item.Model)
+		mode := NormalizeKlingMode(item.Mode)
+		sound := NormalizeKlingSound(item.Sound)
+		if itemModel != model || mode == "" || sound == "" || item.PricePerSecond < 0 {
+			continue
+		}
+		hasReferenceVideo := item.HasReferenceVideo
+		if itemModel != "kling-v3-omni" {
+			hasReferenceVideo = nil
+		}
+		items = append(items, KlingPriceItem{
+			Model:             itemModel,
+			Mode:              mode,
+			Sound:             sound,
+			HasReferenceVideo: hasReferenceVideo,
+			PricePerSecond:    item.PricePerSecond,
+		})
+	}
+	return items
 }

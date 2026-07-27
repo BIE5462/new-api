@@ -34,6 +34,7 @@ import EditChannelModal from './modals/EditChannelModal';
 import EditTagModal from './modals/EditTagModal';
 import MultiKeyManageModal from './modals/MultiKeyManageModal';
 import ChannelUpstreamUpdateModal from './modals/ChannelUpstreamUpdateModal';
+import ChannelColorModal from './modals/ChannelColorModal';
 import { createCardProPagination } from '../../../helpers/utils';
 
 const ChannelsPage = () => {
@@ -72,6 +73,17 @@ const ChannelsPage = () => {
         confirmLoading={channelsData.upstreamApplyLoading}
         onConfirm={channelsData.applyUpstreamUpdates}
         onCancel={channelsData.closeUpstreamUpdateModal}
+      />
+      <ChannelColorModal
+        visible={channelsData.showChannelColorModal}
+        channel={channelsData.colorEditingChannel}
+        loading={channelsData.updatingChannelColor}
+        onCancel={() => {
+          channelsData.setShowChannelColorModal(false);
+          channelsData.setColorEditingChannel(null);
+        }}
+        onSelect={channelsData.updateChannelColor}
+        t={channelsData.t}
       />
 
       {/* Main Content */}

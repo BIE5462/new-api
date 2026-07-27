@@ -7,8 +7,10 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestIsClickHouseDSN(t *testing.T) {
@@ -151,4 +153,29 @@ func TestAssignDisplayLogIds(t *testing.T) {
 	assert.Equal(t, []int{21, 22, 23}, []int{logs[0].Id, logs[1].Id, logs[2].Id})
 
 	assert.NotPanics(t, func() { assignDisplayLogIds(nil, 0) })
+}
+
+func TestPopulateLogUserRemarks(t *testing.T) {
+	originalDB := DB
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		DB = originalDB
+	})
+	require.NoError(t, db.AutoMigrate(&User{}))
+	DB = db
+
+	require.NoError(t, DB.Create(&User{Id: 10, Username: "alice", Password: "password123", Remark: "VIP user"}).Error)
+	require.NoError(t, DB.Create(&User{Id: 20, Username: "bob", Password: "password123"}).Error)
+
+	logs := []*Log{
+		{UserId: 10},
+		{UserId: 20},
+		{UserId: 30},
+	}
+
+	require.NoError(t, populateLogUserRemarks(logs))
+	assert.Equal(t, "VIP user", logs[0].UserRemark)
+	assert.Empty(t, logs[1].UserRemark)
+	assert.Empty(t, logs[2].UserRemark)
 }

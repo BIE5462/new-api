@@ -227,7 +227,7 @@ func FetchUpstreamModels(c *gin.Context) {
 		return
 	}
 
-	channel, err := model.GetChannelById(id, true)
+	channel, err := model.GetChannelById(id, false)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -907,6 +907,10 @@ type ChannelStatusRequest struct {
 	Status int `json:"status"`
 }
 
+type ChannelColorRequest struct {
+	Color string `json:"color"`
+}
+
 type ChannelStatusBatchRequest struct {
 	Ids    []int `json:"ids"`
 	Status int   `json:"status"`
@@ -1083,6 +1087,74 @@ func UpdateChannel(c *gin.Context) {
 		"data":    channel,
 	})
 	return
+}
+
+func UpdateChannelColor(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	request := ChannelColorRequest{}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	allowedColors := map[string]struct{}{
+		"":        {},
+		"#ef4444": {},
+		"#f97316": {},
+		"#eab308": {},
+		"#22c55e": {},
+		"#06b6d4": {},
+		"#3b82f6": {},
+		"#8b5cf6": {},
+		"#ec4899": {},
+	}
+	request.Color = strings.ToLower(strings.TrimSpace(request.Color))
+	if _, ok := allowedColors[request.Color]; !ok {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	channel, err := model.GetChannelById(id, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	settings := make(map[string]any)
+	if strings.TrimSpace(channel.OtherSettings) != "" {
+		if err := common.UnmarshalJsonStr(channel.OtherSettings, &settings); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
+	if request.Color == "" {
+		delete(settings, "color")
+	} else {
+		settings["color"] = request.Color
+	}
+	settingsBytes, err := common.Marshal(settings)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	channel.OtherSettings = string(settingsBytes)
+	if err := channel.UpdateOtherSettings(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	recordManageAudit(c, "channel.color_update", map[string]interface{}{
+		"channel_id": id,
+		"color":      request.Color,
+	})
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    request.Color,
+	})
 }
 
 func UpdateChannelStatus(c *gin.Context) {

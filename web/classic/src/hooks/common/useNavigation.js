@@ -64,10 +64,18 @@ export const useNavigation = (t, docsLink, headerNavModules) => {
         itemKey: 'about',
         to: '/about',
       },
+      {
+        text: t('开始创作'),
+        isExternal: true,
+        externalLink: 'https://ai.u1321964.nyat.app:30002/',
+      },
     ];
 
     // 根据配置过滤导航链接
     return allLinks.filter((link) => {
+      if (!link.itemKey) {
+        return true;
+      }
       if (link.itemKey === 'docs') {
         return docsLink && modules.docs;
       }

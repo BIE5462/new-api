@@ -24,6 +24,7 @@ import {
   InputNumber,
   Radio,
   RadioGroup,
+  Select,
   Table,
   TextArea,
   Typography,
@@ -35,7 +36,22 @@ import { API, copy, showError, showSuccess } from '../../../helpers';
 const { Text } = Typography;
 
 const OPTION_KEY = 'kling.prices';
-const COMMON_MODELS = ['kling-v1', 'kling-v1-6', 'kling-v2-master'];
+const COMMON_MODELS = [
+  'kling-v1',
+  'kling-v1-6',
+  'kling-v2-master',
+  'kling-v3-omni',
+];
+const REFERENCE_VIDEO_ANY = 'any';
+const REFERENCE_VIDEO_FALSE = 'false';
+const REFERENCE_VIDEO_TRUE = 'true';
+const REFERENCE_VIDEO_OPTIONS = [
+  { value: REFERENCE_VIDEO_ANY, label: '不限' },
+  { value: REFERENCE_VIDEO_FALSE, label: '无' },
+  { value: REFERENCE_VIDEO_TRUE, label: '有' },
+];
+const KLING_PRICE_NOTICE =
+  'Kling 请求按 model + 模式 + 音频 + 参考视频 匹配价格；参考视频“不限”为旧配置通配价。omni-video 的 video_list 中任一项存在 video_url/url/video 时判定为有参考视频。';
 
 function createRow(row = {}) {
   const hasPrice = Object.prototype.hasOwnProperty.call(row, 'price_per_second');
@@ -44,6 +60,7 @@ function createRow(row = {}) {
     model: row.model ?? '',
     mode: row.mode ?? 'std',
     sound: row.sound ?? 'off',
+    reference_video: normalizeReferenceVideoState(row),
     price_per_second: hasPrice ? row.price_per_second : '',
   };
 }
@@ -54,6 +71,46 @@ function normalizeText(value) {
 
 function normalizeLower(value) {
   return normalizeText(value).toLowerCase();
+}
+
+function isKlingOmniModelName(model) {
+  return normalizeText(model) === 'kling-v3-omni';
+}
+
+function normalizeReferenceVideoState(row = {}) {
+  if (!isKlingOmniModelName(row.model)) {
+    return REFERENCE_VIDEO_ANY;
+  }
+  if (Object.prototype.hasOwnProperty.call(row, 'reference_video')) {
+    const value = row.reference_video;
+    if (value === REFERENCE_VIDEO_TRUE || value === true) {
+      return REFERENCE_VIDEO_TRUE;
+    }
+    if (value === REFERENCE_VIDEO_FALSE || value === false) {
+      return REFERENCE_VIDEO_FALSE;
+    }
+    return REFERENCE_VIDEO_ANY;
+  }
+  if (!Object.prototype.hasOwnProperty.call(row, 'has_reference_video')) {
+    return REFERENCE_VIDEO_ANY;
+  }
+  return row.has_reference_video ? REFERENCE_VIDEO_TRUE : REFERENCE_VIDEO_FALSE;
+}
+
+function referenceVideoLabel(value) {
+  const option = REFERENCE_VIDEO_OPTIONS.find((item) => item.value === value);
+  return option?.label || '不限';
+}
+
+function referenceVideoSearchText(value) {
+  switch (value) {
+    case REFERENCE_VIDEO_TRUE:
+      return '有 true yes has reference video 参考视频';
+    case REFERENCE_VIDEO_FALSE:
+      return '无 false no without reference video 无参考视频';
+    default:
+      return '不限 any wildcard all reference video 参考视频';
+  }
 }
 
 function parseRowsFromOption(raw) {
@@ -78,6 +135,18 @@ function formatPrice(value, seconds) {
   return `$${(price * seconds).toFixed(4)}`;
 }
 
+function toJsonDraftRow(row) {
+  const { id, reference_video: _, has_reference_video: __, ...rest } = row;
+  const draft = { ...rest };
+  const referenceVideo = normalizeReferenceVideoState(row);
+  if (referenceVideo === REFERENCE_VIDEO_TRUE) {
+    draft.has_reference_video = true;
+  } else if (referenceVideo === REFERENCE_VIDEO_FALSE) {
+    draft.has_reference_video = false;
+  }
+  return draft;
+}
+
 function validateAndNormalizeRows(rows) {
   const seen = new Set();
   const normalized = [];
@@ -87,11 +156,12 @@ function validateAndNormalizeRows(rows) {
     const model = normalizeText(row.model);
     const mode = normalizeLower(row.mode);
     const sound = normalizeLower(row.sound);
+    const referenceVideo = normalizeReferenceVideoState(row);
     const rawPrice = row.price_per_second;
     const price = Number(row.price_per_second);
 
     if (!model || !mode || !sound) {
-      throw new Error(`第 ${line} 行：模型名称、mode、sound 不能为空`);
+      throw new Error(`第 ${line} 行：模型名称、模式、音频不能为空`);
     }
     if (
       rawPrice === '' ||
@@ -103,18 +173,24 @@ function validateAndNormalizeRows(rows) {
       throw new Error(`第 ${line} 行：每秒价格必须填写且大于等于 0`);
     }
 
-    const key = `${model}|${mode}|${sound}`;
+    const key = `${model}|${mode}|${sound}|${referenceVideo}`;
     if (seen.has(key)) {
       throw new Error(`重复组合：${key}`);
     }
     seen.add(key);
 
-    normalized.push({
+    const normalizedRow = {
       model,
       mode,
       sound,
       price_per_second: price,
-    });
+    };
+    if (referenceVideo === REFERENCE_VIDEO_TRUE) {
+      normalizedRow.has_reference_video = true;
+    } else if (referenceVideo === REFERENCE_VIDEO_FALSE) {
+      normalizedRow.has_reference_video = false;
+    }
+    normalized.push(normalizedRow);
   });
 
   return normalized.sort((a, b) => {
@@ -122,7 +198,11 @@ function validateAndNormalizeRows(rows) {
     if (modelCompare !== 0) return modelCompare;
     const modeCompare = a.mode.localeCompare(b.mode);
     if (modeCompare !== 0) return modeCompare;
-    return a.sound.localeCompare(b.sound);
+    const soundCompare = a.sound.localeCompare(b.sound);
+    if (soundCompare !== 0) return soundCompare;
+    return normalizeReferenceVideoState(a).localeCompare(
+      normalizeReferenceVideoState(b)
+    );
   });
 }
 
@@ -154,7 +234,7 @@ export default function KlingPriceSettings({ options, refresh }) {
       setJsonText(JSON.stringify(validateAndNormalizeRows(nextRows), null, 2));
       setJsonError('');
     } catch {
-      setJsonText(JSON.stringify(nextRows.map(({ id, ...rest }) => rest), null, 2));
+      setJsonText(JSON.stringify(nextRows.map(toJsonDraftRow), null, 2));
     }
   };
 
@@ -195,9 +275,16 @@ export default function KlingPriceSettings({ options, refresh }) {
     if (!keyword) {
       return rows;
     }
-    return rows.filter((row) =>
-      [row.model, row.mode, row.sound].some((value) => normalizeLower(value).includes(keyword))
-    );
+    return rows.filter((row) => {
+      const referenceVideo = normalizeReferenceVideoState(row);
+      return [
+        row.model,
+        row.mode,
+        row.sound,
+        referenceVideoLabel(referenceVideo),
+        referenceVideoSearchText(referenceVideo),
+      ].some((value) => normalizeLower(value).includes(keyword));
+    });
   }, [rows, search]);
 
   const validationError = useMemo(() => {
@@ -248,7 +335,7 @@ export default function KlingPriceSettings({ options, refresh }) {
       ),
     },
     {
-      title: 'mode',
+      title: t('模式'),
       dataIndex: 'mode',
       width: 150,
       render: (value, record) => (
@@ -260,7 +347,7 @@ export default function KlingPriceSettings({ options, refresh }) {
       ),
     },
     {
-      title: 'sound',
+      title: t('音频'),
       dataIndex: 'sound',
       width: 150,
       render: (value, record) => (
@@ -268,6 +355,27 @@ export default function KlingPriceSettings({ options, refresh }) {
           value={value}
           placeholder='off'
           onChange={(val) => updateRow(record.id, 'sound', val)}
+        />
+      ),
+    },
+    {
+      title: t('参考视频'),
+      dataIndex: 'reference_video',
+      width: 130,
+      render: (value, record) => (
+        <Select
+          value={
+            isKlingOmniModelName(record.model)
+              ? value || REFERENCE_VIDEO_ANY
+              : REFERENCE_VIDEO_ANY
+          }
+          optionList={REFERENCE_VIDEO_OPTIONS.map((item) => ({
+            value: item.value,
+            label: t(item.label),
+          }))}
+          onChange={(val) => updateRow(record.id, 'reference_video', val)}
+          disabled={!isKlingOmniModelName(record.model)}
+          style={{ width: '100%' }}
         />
       ),
     },
@@ -322,7 +430,7 @@ export default function KlingPriceSettings({ options, refresh }) {
     <div style={{ maxWidth: 1100 }}>
       <Banner
         type='warning'
-        description={t('Kling 请求必须命中 model + mode + sound 的精确组合价，未配置组合会直接返回 400。')}
+        description={t(KLING_PRICE_NOTICE)}
         style={{ marginBottom: 16 }}
       />
 
@@ -348,7 +456,7 @@ export default function KlingPriceSettings({ options, refresh }) {
         <Input
           value={search}
           prefix={<IconSearch size={14} />}
-          placeholder={t('搜索模型/mode/sound')}
+          placeholder={t('搜索模型/模式/音频/参考视频')}
           onChange={setSearch}
           style={{ width: 220 }}
         />
@@ -376,7 +484,7 @@ export default function KlingPriceSettings({ options, refresh }) {
             pagination={false}
             rowKey='id'
             size='small'
-            scroll={{ x: 966 }}
+            scroll={{ x: 1096 }}
           />
           {validationError && rows.length > 0 && (
             <Text type='danger' size='small' style={{ display: 'block', marginTop: 8 }}>

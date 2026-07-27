@@ -30,6 +30,7 @@ import {
   renderQuota,
   renderNumber,
   getLogOther,
+  getQuotaAdjustment,
   copy,
   renderClaudeLogContent,
   renderLogContent,
@@ -51,6 +52,7 @@ export const useLogsData = () => {
     TIME: 'time',
     CHANNEL: 'channel',
     USERNAME: 'username',
+    USER_REMARK: 'user_remark',
     TOKEN: 'token',
     GROUP: 'group',
     TYPE: 'type',
@@ -114,6 +116,7 @@ export const useLogsData = () => {
       [COLUMN_KEYS.TIME]: true,
       [COLUMN_KEYS.CHANNEL]: isAdminUser,
       [COLUMN_KEYS.USERNAME]: isAdminUser,
+      [COLUMN_KEYS.USER_REMARK]: isAdminUser,
       [COLUMN_KEYS.TOKEN]: true,
       [COLUMN_KEYS.GROUP]: true,
       [COLUMN_KEYS.TYPE]: true,
@@ -143,6 +146,7 @@ export const useLogsData = () => {
       if (!isAdminUser) {
         merged[COLUMN_KEYS.CHANNEL] = false;
         merged[COLUMN_KEYS.USERNAME] = false;
+        merged[COLUMN_KEYS.USER_REMARK] = false;
         merged[COLUMN_KEYS.RETRY] = false;
       }
 
@@ -164,7 +168,9 @@ export const useLogsData = () => {
   };
 
   // Column visibility state
-  const [visibleColumns, setVisibleColumns] = useState(getInitialVisibleColumns);
+  const [visibleColumns, setVisibleColumns] = useState(
+    getInitialVisibleColumns,
+  );
   const [showColumnSelector, setShowColumnSelector] = useState(false);
   const [billingDisplayMode, setBillingDisplayMode] = useState(
     getInitialBillingDisplayMode,
@@ -209,6 +215,7 @@ export const useLogsData = () => {
       if (
         (key === COLUMN_KEYS.CHANNEL ||
           key === COLUMN_KEYS.USERNAME ||
+          key === COLUMN_KEYS.USER_REMARK ||
           key === COLUMN_KEYS.RETRY) &&
         !isAdminUser
       ) {
@@ -383,7 +390,34 @@ export const useLogsData = () => {
       let other = getLogOther(logs[i].other);
       let expandDataLocal = [];
 
-      if (isAdminUser && (logs[i].type === 0 || logs[i].type === 2 || logs[i].type === 6)) {
+      const quotaAdjustment = getQuotaAdjustment(logs[i]);
+      if (quotaAdjustment) {
+        const params = quotaAdjustment.params || {};
+        let quotaChange = '';
+        if (quotaAdjustment.action === 'user.quota_add' && params.quota) {
+          quotaChange = `+${params.quota}`;
+        } else if (
+          quotaAdjustment.action === 'user.quota_subtract' &&
+          params.quota
+        ) {
+          quotaChange = `-${params.quota}`;
+        } else if (quotaAdjustment.action === 'user.quota_override') {
+          const from = params.from || '';
+          const to = params.to || '';
+          if (from || to) {
+            quotaChange = `${from} → ${to}`;
+          }
+        }
+        expandDataLocal.push({
+          key: t('额度'),
+          value: quotaChange || quotaAdjustment.content,
+        });
+      }
+
+      if (
+        isAdminUser &&
+        (logs[i].type === 0 || logs[i].type === 2 || logs[i].type === 6)
+      ) {
         expandDataLocal.push({
           key: t('渠道信息'),
           value: `${logs[i].channel} - ${logs[i].channel_name || '[未知]'}`,
@@ -430,7 +464,10 @@ export const useLogsData = () => {
           expandDataLocal.push({
             key: t('日志详情'),
             value: other?.claude
-              ? renderClaudeLogContent({ ...other, displayMode: billingDisplayMode })
+              ? renderClaudeLogContent({
+                  ...other,
+                  displayMode: billingDisplayMode,
+                })
               : renderLogContent({ ...other, displayMode: billingDisplayMode }),
           });
         }
@@ -520,7 +557,14 @@ export const useLogsData = () => {
           expandDataLocal.push({
             key: t('失败原因'),
             value: (
-              <div style={{ maxWidth: 600, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.6 }}>
+              <div
+                style={{
+                  maxWidth: 600,
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  lineHeight: 1.6,
+                }}
+              >
                 {other.reason}
               </div>
             ),
@@ -537,7 +581,8 @@ export const useLogsData = () => {
         const ss = other.stream_status;
         const isOk = ss.status === 'ok';
         const statusLabel = isOk ? '✓ ' + t('正常') : '✗ ' + t('异常');
-        let streamValue = statusLabel + ' (' + (ss.end_reason || 'unknown') + ')';
+        let streamValue =
+          statusLabel + ' (' + (ss.end_reason || 'unknown') + ')';
         if (ss.error_count > 0) {
           streamValue += ` [${t('软错误')}: ${ss.error_count}]`;
         }
@@ -552,7 +597,14 @@ export const useLogsData = () => {
           expandDataLocal.push({
             key: t('流错误详情'),
             value: (
-              <div style={{ maxWidth: 600, whiteSpace: 'pre-line', wordBreak: 'break-word', lineHeight: 1.6 }}>
+              <div
+                style={{
+                  maxWidth: 600,
+                  whiteSpace: 'pre-line',
+                  wordBreak: 'break-word',
+                  lineHeight: 1.6,
+                }}
+              >
                 {ss.errors.join('\n')}
               </div>
             ),

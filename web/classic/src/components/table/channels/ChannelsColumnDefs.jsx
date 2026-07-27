@@ -304,6 +304,27 @@ const getUpstreamUpdateMeta = (record) => {
   };
 };
 
+const CHANNEL_COLORS = new Set([
+  '#ef4444',
+  '#f97316',
+  '#eab308',
+  '#22c55e',
+  '#06b6d4',
+  '#3b82f6',
+  '#8b5cf6',
+  '#ec4899',
+]);
+
+const getChannelColor = (settings) => {
+  if (!settings) return '';
+  try {
+    const color = JSON.parse(settings)?.color;
+    return CHANNEL_COLORS.has(color) ? color : '';
+  } catch {
+    return '';
+  }
+};
+
 export const getChannelsColumns = ({
   t,
   COLUMN_KEYS,
@@ -327,7 +348,19 @@ export const getChannelsColumns = ({
   setCurrentMultiKeyChannel,
   openUpstreamUpdateModal,
   detectChannelUpstreamUpdates,
+  openChannelColorModal,
+  sortBy,
+  sortOrder,
 }) => {
+  let nameSortOrder = false;
+  if (sortBy === 'name') {
+    if (sortOrder === 'asc') {
+      nameSortOrder = 'ascend';
+    } else if (sortOrder === 'desc') {
+      nameSortOrder = 'descend';
+    }
+  }
+
   return [
     {
       key: COLUMN_KEYS.ID,
@@ -338,7 +371,10 @@ export const getChannelsColumns = ({
       key: COLUMN_KEYS.NAME,
       title: t('名称'),
       dataIndex: 'name',
+      sorter: true,
+      sortOrder: nameSortOrder,
       render: (text, record, index) => {
+        const channelColor = getChannelColor(record.settings);
         const passThroughEnabled = isRequestPassThroughEnabled(record);
         const upstreamUpdateMeta = getUpstreamUpdateMeta(record);
         const pendingAddCount = upstreamUpdateMeta.pendingAddModels.length;
@@ -348,7 +384,7 @@ export const getChannelsColumns = ({
           upstreamUpdateMeta.supported &&
           upstreamUpdateMeta.enabled &&
           (pendingAddCount > 0 || pendingRemoveCount > 0);
-        const nameNode =
+        const textNode =
           record.remark && record.remark.trim() !== '' ? (
             <Tooltip
               content={
@@ -382,6 +418,18 @@ export const getChannelsColumns = ({
           ) : (
             <span>{text}</span>
           );
+        const nameNode = channelColor ? (
+          <Space spacing={6} align='center'>
+            <span
+              className='inline-block h-6 w-1 rounded-full'
+              style={{ backgroundColor: channelColor }}
+              aria-label={t('渠道颜色')}
+            />
+            {textNode}
+          </Space>
+        ) : (
+          textNode
+        );
 
         if (!passThroughEnabled && !showUpstreamUpdateTag) {
           return nameNode;
@@ -691,6 +739,12 @@ export const getChannelsColumns = ({
         if (record.children === undefined) {
           const upstreamUpdateMeta = getUpstreamUpdateMeta(record);
           const moreMenuItems = [
+            {
+              node: 'item',
+              name: t('设置颜色'),
+              type: 'tertiary',
+              onClick: () => openChannelColorModal(record),
+            },
             {
               node: 'item',
               name: t('删除'),

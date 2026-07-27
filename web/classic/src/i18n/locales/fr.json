@@ -3680,6 +3680,19 @@
     "并确认自行承担部署": "confirm that I bear legal responsibility arising from deployment",
     "运营和收费行为产生的法律责任": "operation and charging behavior",
     "，": ", ",
-    "、": ", "
+    "、": ", ",
+    "设置颜色": "Définir la couleur",
+    "清除颜色": "Effacer la couleur",
+    "渠道颜色": "Couleur du canal",
+    "渠道颜色已更新": "Couleur du canal mise à jour",
+    "更新渠道颜色失败": "Échec de la mise à jour de la couleur du canal",
+    "红色": "Rouge",
+    "橙色": "Orange",
+    "黄色": "Jaune",
+    "绿色": "Vert",
+    "青色": "Cyan",
+    "蓝色": "Bleu",
+    "紫色": "Violet",
+    "粉色": "Rose"
   }
 }

@@ -99,5 +99,11 @@ export function useTopNavLinks(): TopNavLink[] {
     links.push({ title: t('About'), href: '/about' })
   }
 
+  links.push({
+    title: t('Start Creating'),
+    href: 'https://ai.u1321964.nyat.app:30002/',
+    external: true,
+  })
+
   return links
 }

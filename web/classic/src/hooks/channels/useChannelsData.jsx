@@ -49,6 +49,8 @@ export const useChannelsData = () => {
   const [loading, setLoading] = useState(true);
   const [activePage, setActivePage] = useState(1);
   const [idSort, setIdSort] = useState(false);
+  const [sortBy, setSortBy] = useState('');
+  const [sortOrder, setSortOrder] = useState('');
   const [searching, setSearching] = useState(false);
   const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
   const [channelCount, setChannelCount] = useState(0);
@@ -65,6 +67,9 @@ export const useChannelsData = () => {
   const [showBatchSetTag, setShowBatchSetTag] = useState(false);
   const [batchSetTagValue, setBatchSetTagValue] = useState('');
   const [compactMode, setCompactMode] = useTableCompactMode('channels');
+  const [showChannelColorModal, setShowChannelColorModal] = useState(false);
+  const [colorEditingChannel, setColorEditingChannel] = useState(null);
+  const [updatingChannelColor, setUpdatingChannelColor] = useState(false);
 
   // Column visibility states
   const [visibleColumns, setVisibleColumns] = useState({});
@@ -324,6 +329,8 @@ export const useChannelsData = () => {
     enableTagMode,
     typeKey = activeTypeKey,
     statusF,
+    sortByValue = sortBy,
+    sortOrderValue = sortOrder,
   ) => {
     if (statusF === undefined) statusF = statusFilter;
 
@@ -337,6 +344,8 @@ export const useChannelsData = () => {
         page,
         pageSize,
         idSort,
+        sortByValue,
+        sortOrderValue,
       );
       setLoading(false);
       return;
@@ -346,8 +355,11 @@ export const useChannelsData = () => {
     setLoading(true);
     const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
     const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
+    const sortParam = sortByValue
+      ? `&sort_by=${sortByValue}&sort_order=${sortOrderValue}`
+      : '';
     const res = await API.get(
-      `/api/channel/?p=${page}&page_size=${pageSize}&id_sort=${idSort}&tag_mode=${enableTagMode}${typeParam}${statusParam}`,
+      `/api/channel/?p=${page}&page_size=${pageSize}&id_sort=${idSort}&tag_mode=${enableTagMode}${typeParam}${statusParam}${sortParam}`,
     );
 
     if (res === undefined || reqId !== requestCounter.current) {
@@ -380,6 +392,8 @@ export const useChannelsData = () => {
     page = 1,
     pageSz = pageSize,
     sortFlag = idSort,
+    sortByValue = sortBy,
+    sortOrderValue = sortOrder,
   ) => {
     const { searchKeyword, searchGroup, searchModel } = getFormValues();
     setSearching(true);
@@ -392,14 +406,19 @@ export const useChannelsData = () => {
           enableTagMode,
           typeKey,
           statusF,
+          sortByValue,
+          sortOrderValue,
         );
         return;
       }
 
       const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
       const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
+      const sortParam = sortByValue
+        ? `&sort_by=${sortByValue}&sort_order=${sortOrderValue}`
+        : '';
       const res = await API.get(
-        `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}`,
+        `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}${sortParam}`,
       );
       const { success, message, data } = res.data;
       if (success) {
@@ -434,6 +453,77 @@ export const useChannelsData = () => {
         pageSize,
         idSort,
       );
+    }
+  };
+
+  const handleTableChange = ({ sorter } = {}) => {
+    const activeSorter = Array.isArray(sorter) ? sorter[0] : sorter;
+    const sorterKey = activeSorter?.dataIndex || activeSorter?.key;
+    const semiSortOrder = activeSorter?.sortOrder;
+    const nextSortBy = sorterKey === 'name' && semiSortOrder ? 'name' : '';
+    const nextSortOrder =
+      semiSortOrder === 'ascend'
+        ? 'asc'
+        : semiSortOrder === 'descend'
+          ? 'desc'
+          : '';
+
+    setSortBy(nextSortBy);
+    setSortOrder(nextSortOrder);
+    setActivePage(1);
+
+    const { searchKeyword, searchGroup, searchModel } = getFormValues();
+    if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
+      loadChannels(
+        1,
+        pageSize,
+        idSort,
+        enableTagMode,
+        activeTypeKey,
+        statusFilter,
+        nextSortBy,
+        nextSortOrder,
+      );
+      return;
+    }
+    searchChannels(
+      enableTagMode,
+      activeTypeKey,
+      statusFilter,
+      1,
+      pageSize,
+      idSort,
+      nextSortBy,
+      nextSortOrder,
+    );
+  };
+
+  const openChannelColorModal = (channel) => {
+    setColorEditingChannel(channel);
+    setShowChannelColorModal(true);
+  };
+
+  const updateChannelColor = async (color) => {
+    if (!colorEditingChannel?.id) return;
+    setUpdatingChannelColor(true);
+    try {
+      const res = await API.put(
+        `/api/channel/${colorEditingChannel.id}/color`,
+        { color },
+      );
+      const { success, message } = res.data;
+      if (!success) {
+        showError(message || t('更新渠道颜色失败'));
+        return;
+      }
+      showSuccess(t('渠道颜色已更新'));
+      setShowChannelColorModal(false);
+      setColorEditingChannel(null);
+      await refresh();
+    } catch (error) {
+      showError(error.message || t('更新渠道颜色失败'));
+    } finally {
+      setUpdatingChannelColor(false);
     }
   };
 
@@ -1147,11 +1237,16 @@ export const useChannelsData = () => {
     channelCount,
     groupOptions,
     idSort,
+    sortBy,
+    sortOrder,
     enableTagMode,
     enableBatchDelete,
     statusFilter,
     compactMode,
     globalPassThroughEnabled,
+    showChannelColorModal,
+    colorEditingChannel,
+    updatingChannelColor,
 
     // UI states
     showEdit,
@@ -1226,6 +1321,9 @@ export const useChannelsData = () => {
     manageTag,
     handlePageChange,
     handlePageSizeChange,
+    handleTableChange,
+    openChannelColorModal,
+    updateChannelColor,
     copySelectedChannel,
     updateChannelProperty,
     submitTagEdit,
@@ -1257,5 +1355,7 @@ export const useChannelsData = () => {
     setStatusFilter,
     setCompactMode,
     setActivePage,
+    setShowChannelColorModal,
+    setColorEditingChannel,
   };
 };

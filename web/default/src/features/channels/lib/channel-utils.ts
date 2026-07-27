@@ -20,6 +20,7 @@ import { formatCurrencyFromUSD, formatQuotaWithCurrency } from '@/lib/currency'
 import { formatTimestampToDate } from '@/lib/format'
 
 import {
+  CHANNEL_COLOR_OPTIONS,
   CHANNEL_STATUS_CONFIG,
   CHANNEL_TYPES,
   MULTI_KEY_STATUS_CONFIG,
@@ -157,6 +158,19 @@ export function isChannelEnabled(channel: Channel): boolean {
  */
 export function isMultiKeyChannel(channel: Channel): boolean {
   return channel.channel_info?.is_multi_key || false
+}
+
+export function getChannelColor(settings: string): string | undefined {
+  if (!settings.trim()) return undefined
+  try {
+    const parsed = JSON.parse(settings) as ChannelOtherSettings
+    if (typeof parsed.color !== 'string') return undefined
+    return CHANNEL_COLOR_OPTIONS.some((option) => option.value === parsed.color)
+      ? parsed.color
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 // ============================================================================

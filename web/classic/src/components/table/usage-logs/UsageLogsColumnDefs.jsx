@@ -34,6 +34,7 @@ import {
   renderModelTag,
   renderModelPriceSimple,
   renderTieredModelPriceSimple,
+  getQuotaAdjustment,
 } from '../../../helpers';
 import { IconHelpCircle } from '@douyinfe/semi-icons';
 import { CircleAlert, Route, Sparkles } from 'lucide-react';
@@ -95,7 +96,48 @@ function buildChannelAffinityTooltip(affinity, t) {
 }
 
 // Render functions
-function renderType(type, t) {
+function formatQuotaAdjustmentValue(value) {
+  if (value === undefined || value === null || value === '') {
+    return '';
+  }
+  return String(value);
+}
+
+function renderQuotaAdjustment(record, t) {
+  const adjustment = getQuotaAdjustment(record);
+  if (!adjustment) {
+    return null;
+  }
+
+  const params = adjustment.params || {};
+  if (adjustment.action === 'user.quota_add') {
+    const quota = formatQuotaAdjustmentValue(params.quota);
+    return quota
+      ? `${t('添加额度')}：+${quota}`
+      : adjustment.content || t('添加额度');
+  }
+  if (adjustment.action === 'user.quota_subtract') {
+    const quota = formatQuotaAdjustmentValue(params.quota);
+    return quota ? `${t('减少')}：-${quota}` : adjustment.content || t('减少');
+  }
+  if (adjustment.action === 'user.quota_override') {
+    const from = formatQuotaAdjustmentValue(params.from);
+    const to = formatQuotaAdjustmentValue(params.to);
+    if (from || to) {
+      return `${t('覆盖')}：${from} → ${to}`;
+    }
+    return adjustment.content || t('覆盖');
+  }
+  return adjustment.content || null;
+}
+
+function renderType(type, t, record, isAdminUser) {
+  // Admin quota adjustments are represented as management logs by the API,
+  // but users should see them as recharge entries in their log list.
+  if (!isAdminUser && type === 3 && getQuotaAdjustment(record)) {
+    type = 1;
+  }
+
   switch (type) {
     case 1:
       return (
@@ -144,10 +186,7 @@ function renderType(type, t) {
 
 function buildStreamStatusTooltip(ss, t) {
   if (!ss) return null;
-  const lines = [
-    t('流状态') + '：' + t('异常'),
-    (ss.end_reason || 'unknown'),
-  ];
+  const lines = [t('流状态') + '：' + t('异常'), ss.end_reason || 'unknown'];
   if (ss.error_count > 0) {
     lines.push(`${t('软错误')}: ${ss.error_count}`);
   }
@@ -185,11 +224,7 @@ function renderIsStream(bool, t, streamStatus) {
                 userSelect: 'none',
               }}
             >
-              <CircleAlert
-                size={14}
-                strokeWidth={2.5}
-                color='currentColor'
-              />
+              <CircleAlert size={14} strokeWidth={2.5} color='currentColor' />
             </span>
           </Tooltip>
         )}
@@ -269,67 +304,59 @@ function renderBillingTag(record, t) {
   return null;
 }
 
-function renderModelName(record, copyText, t) {
+function renderModelName(record, copyText, t, isAdminUser) {
   let other = getLogOther(record.other);
   let modelMapped =
     other?.is_model_mapped &&
     other?.upstream_model_name &&
     other?.upstream_model_name !== '';
-  if (!modelMapped) {
-    return renderModelTag(record.model_name, {
-      onClick: (event) => {
-        copyText(event, record.model_name).then((r) => {});
-      },
-    });
-  } else {
-    return (
-      <>
-        <Space vertical align={'start'}>
-          <Popover
-            content={
-              <div style={{ padding: 10 }}>
-                <Space vertical align={'start'}>
-                  <div className='flex items-center'>
-                    <Typography.Text strong style={{ marginRight: 8 }}>
-                      {t('请求并计费模型')}:
-                    </Typography.Text>
-                    {renderModelTag(record.model_name, {
-                      onClick: (event) => {
-                        copyText(event, record.model_name).then((r) => {});
-                      },
-                    })}
-                  </div>
-                  <div className='flex items-center'>
-                    <Typography.Text strong style={{ marginRight: 8 }}>
-                      {t('实际模型')}:
-                    </Typography.Text>
-                    {renderModelTag(other.upstream_model_name, {
-                      onClick: (event) => {
-                        copyText(event, other.upstream_model_name).then(
-                          (r) => {},
-                        );
-                      },
-                    })}
-                  </div>
-                </Space>
+  const showActualModel = isAdminUser && modelMapped;
+
+  return (
+    <Space vertical align={'start'}>
+      <Popover
+        content={
+          <div style={{ padding: 10 }}>
+            <Space vertical align={'start'}>
+              <div className='flex items-center'>
+                <Typography.Text strong style={{ marginRight: 8 }}>
+                  {t('请求并计费模型')}:
+                </Typography.Text>
+                {renderModelTag(record.model_name, {
+                  onClick: (event) => {
+                    copyText(event, record.model_name).then((r) => {});
+                  },
+                })}
               </div>
-            }
-          >
-            {renderModelTag(record.model_name, {
-              onClick: (event) => {
-                copyText(event, record.model_name).then((r) => {});
-              },
-              suffixIcon: (
-                <Route
-                  style={{ width: '0.9em', height: '0.9em', opacity: 0.75 }}
-                />
-              ),
-            })}
-          </Popover>
-        </Space>
-      </>
-    );
-  }
+              {showActualModel && (
+                <div className='flex items-center'>
+                  <Typography.Text strong style={{ marginRight: 8 }}>
+                    {t('实际模型')}:
+                  </Typography.Text>
+                  {renderModelTag(other.upstream_model_name, {
+                    onClick: (event) => {
+                      copyText(event, other.upstream_model_name).then(
+                        (r) => {},
+                      );
+                    },
+                  })}
+                </div>
+              )}
+            </Space>
+          </div>
+        }
+      >
+        {renderModelTag(record.model_name, {
+          onClick: (event) => {
+            copyText(event, record.model_name).then((r) => {});
+          },
+          suffixIcon: showActualModel ? (
+            <Route style={{ width: '0.9em', height: '0.9em', opacity: 0.75 }} />
+          ) : null,
+        })}
+      </Popover>
+    </Space>
+  );
 }
 
 function toTokenNumber(value) {
@@ -426,6 +453,12 @@ function renderCompactDetailSummary(summarySegments) {
 
 function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
   const other = getLogOther(record.other);
+  const quotaAdjustmentText = renderQuotaAdjustment(record, t);
+  if (quotaAdjustmentText) {
+    return {
+      segments: [{ text: quotaAdjustmentText, tone: 'primary' }],
+    };
+  }
 
   if (record.type === 6) {
     return {
@@ -461,7 +494,11 @@ function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
     };
   }
 
-  const summaryOpts = { ...other, displayMode: billingDisplayMode, outputMode: 'segments' };
+  const summaryOpts = {
+    ...other,
+    displayMode: billingDisplayMode,
+    outputMode: 'segments',
+  };
 
   if (other?.billing_mode === 'tiered_expr') {
     return { segments: renderTieredModelPriceSimple(summaryOpts) };
@@ -609,6 +646,34 @@ export const getLogsColumns = ({
       },
     },
     {
+      key: COLUMN_KEYS.USER_REMARK,
+      title: t('备注'),
+      dataIndex: 'user_remark',
+      width: 160,
+      render: (text, record, index) => {
+        if (!isAdminUser) {
+          return <></>;
+        }
+        const remark = String(text || '').trim();
+        if (!remark) {
+          return <Typography.Text type='tertiary'>-</Typography.Text>;
+        }
+        return (
+          <Typography.Text
+            ellipsis={{
+              showTooltip: {
+                type: 'popover',
+                opts: { style: { maxWidth: 260 } },
+              },
+            }}
+            style={{ maxWidth: 160 }}
+          >
+            {remark}
+          </Typography.Text>
+        );
+      },
+    },
+    {
       key: COLUMN_KEYS.TOKEN,
       title: t('令牌'),
       dataIndex: 'token_name',
@@ -676,7 +741,7 @@ export const getLogsColumns = ({
       title: t('类型'),
       dataIndex: 'type',
       render: (text, record, index) => {
-        return <>{renderType(text, t)}</>;
+        return <>{renderType(text, t, record, isAdminUser)}</>;
       },
     },
     {
@@ -688,7 +753,7 @@ export const getLogsColumns = ({
           record.type === 2 ||
           record.type === 5 ||
           record.type === 6 ? (
-          <>{renderModelName(record, copyText, t)}</>
+          <>{renderModelName(record, copyText, t, isAdminUser)}</>
         ) : (
           <></>
         );

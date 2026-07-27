@@ -1,3 +1,4 @@
+import { getGroups as getUserGroups } from '@/features/users/api'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -17,7 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api, type ApiRequestConfig } from '@/lib/api'
-import { getGroups as getUserGroups } from '@/features/users/api'
+
 import type {
   AddChannelRequest,
   BatchDeleteParams,
@@ -133,6 +134,18 @@ export async function updateChannel(
   const res = await api.put(
     '/api/channel/',
     { id, ...data },
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function updateChannelColor(
+  id: number,
+  color: string
+): Promise<{ success: boolean; message?: string; data?: string }> {
+  const res = await api.put(
+    `/api/channel/${id}/color`,
+    { color },
     channelActionConfig()
   )
   return res.data

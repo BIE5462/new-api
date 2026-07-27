@@ -645,6 +645,20 @@ export const calculateModelPrice = ({
     }
   }
 
+  const klingPrices = Array.isArray(record.kling_prices)
+    ? record.kling_prices
+    : [];
+  if (klingPrices.length > 0) {
+    return {
+      isKlingPricing: true,
+      klingPrices,
+      modelName: record.model_name,
+      displayPrice,
+      usedGroup,
+      usedGroupRatio,
+    };
+  }
+
   // 2. 动态计费（tiered_expr）
   if (record.billing_mode === 'tiered_expr' && record.billing_expr) {
     return {
@@ -771,11 +785,73 @@ export const calculateModelPrice = ({
   };
 };
 
+const getKlingReferenceVideoLabel = (item, t, modelName) => {
+  if (modelName !== 'kling-v3-omni') {
+    return '';
+  }
+  if (item.has_reference_video === true) {
+    return `${t('参考视频')} ${t('是')}`;
+  }
+  if (item.has_reference_video === false) {
+    return `${t('参考视频')} ${t('否')}`;
+  }
+  return `${t('参考视频')} ${t('不限')}`;
+};
+
+const getKlingSoundLabel = (sound, t) => {
+  const normalized = String(sound || 'off').toLowerCase();
+  if (normalized === 'on' || normalized === 'true' || normalized === 'yes') {
+    return `${t('音频')} ${t('是')}`;
+  }
+  return `${t('音频')} ${t('否')}`;
+};
+
+const buildKlingPriceItems = (priceData, t) => {
+  const prices = Array.isArray(priceData.klingPrices)
+    ? priceData.klingPrices
+    : [];
+
+  return prices
+    .map((item, index) => {
+      const pricePerSecond = Number(item.price_per_second);
+      if (!Number.isFinite(pricePerSecond) || pricePerSecond < 0) {
+        return null;
+      }
+      const mode = item.mode || 'std';
+      const sound = item.sound || 'off';
+      const referenceVideo = getKlingReferenceVideoLabel(
+        item,
+        t,
+        priceData.modelName,
+      );
+      const detailParts = [
+        `${t('模式')} ${mode}`,
+        getKlingSoundLabel(sound, t),
+        referenceVideo,
+      ].filter(Boolean);
+      const perSecondPrice = priceData.displayPrice(
+        pricePerSecond * priceData.usedGroupRatio,
+      );
+
+      return {
+        key: `kling-${index}-${mode}-${sound}-${String(item.has_reference_video)}`,
+        label: '',
+        value: `${detailParts.join(' / ')}：${t('每秒')} ${perSecondPrice}`,
+        suffix: '',
+      };
+    })
+    .filter(Boolean);
+};
+
 export const getModelPriceItems = (
   priceData,
   t,
   quotaDisplayType = 'USD',
 ) => {
+  if (priceData.isKlingPricing) {
+    return buildKlingPriceItems(priceData, t);
+  }
+
   if (priceData.isDynamicPricing) {
     return [
       {
@@ -995,7 +1071,8 @@ export const formatPriceInfo = (priceData, t, quotaDisplayType = 'USD') => {
     <>
       {items.map((item) => (
         <span key={item.key} style={{ color: 'var(--semi-color-text-1)' }}>
-          {item.label} {item.value}
+          {item.label ? `${item.label} ` : ''}
+          {item.value}
           {item.suffix}
         </span>
       ))}

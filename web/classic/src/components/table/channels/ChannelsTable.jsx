@@ -41,6 +41,9 @@ const ChannelsTable = (channelsData) => {
     handlePageChange,
     handlePageSizeChange,
     handleRow,
+    handleTableChange,
+    sortBy,
+    sortOrder,
     t,
     COLUMN_KEYS,
     // Column functions and data
@@ -63,6 +66,7 @@ const ChannelsTable = (channelsData) => {
     setCurrentMultiKeyChannel,
     openUpstreamUpdateModal,
     detectChannelUpstreamUpdates,
+    openChannelColorModal,
   } = channelsData;
 
   // Get all columns
@@ -90,6 +94,9 @@ const ChannelsTable = (channelsData) => {
       setCurrentMultiKeyChannel,
       openUpstreamUpdateModal,
       detectChannelUpstreamUpdates,
+      openChannelColorModal,
+      sortBy,
+      sortOrder,
     });
   }, [
     t,
@@ -114,6 +121,9 @@ const ChannelsTable = (channelsData) => {
     setCurrentMultiKeyChannel,
     openUpstreamUpdateModal,
     detectChannelUpstreamUpdates,
+    openChannelColorModal,
+    sortBy,
+    sortOrder,
   ]);
 
   // Filter columns based on visibility settings
@@ -148,6 +158,7 @@ const ChannelsTable = (channelsData) => {
       hidePagination={true}
       expandAllRows={false}
       onRow={handleRow}
+      onChange={handleTableChange}
       rowSelection={
         enableBatchDelete
           ? {

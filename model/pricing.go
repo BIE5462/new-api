@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 )
@@ -33,9 +34,10 @@ type Pricing struct {
 	AudioCompletionRatio   *float64                `json:"audio_completion_ratio,omitempty"`
 	EnableGroup            []string                `json:"enable_groups"`
 	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
-	BillingMode            string                  `json:"billing_mode,omitempty"`
-	BillingExpr            string                  `json:"billing_expr,omitempty"`
-	PricingVersion         string                  `json:"pricing_version,omitempty"`
+	BillingMode            string                         `json:"billing_mode,omitempty"`
+	BillingExpr            string                         `json:"billing_expr,omitempty"`
+	KlingPrices            []model_setting.KlingPriceItem `json:"kling_prices,omitempty"`
+	PricingVersion         string                         `json:"pricing_version,omitempty"`
 }
 
 type PricingVendor struct {
@@ -336,6 +338,10 @@ func updatePricing() {
 				pricing.BillingMode = billingMode
 				pricing.BillingExpr = expr
 			}
+		}
+		if klingPrices := model_setting.GetKlingPricesForModel(model); len(klingPrices) > 0 {
+			pricing.KlingPrices = klingPrices
+			pricing.QuotaType = 1
 		}
 		pricingMap = append(pricingMap, pricing)
 	}

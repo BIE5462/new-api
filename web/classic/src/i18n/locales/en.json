@@ -3826,6 +3826,19 @@
     "并确认自行承担部署": "confirm that I bear legal responsibility arising from deployment",
     "运营和收费行为产生的法律责任": "operation and charging behavior",
     "，": ", ",
-    "、": ", "
+    "、": ", ",
+    "设置颜色": "Set color",
+    "清除颜色": "Clear color",
+    "渠道颜色": "Channel color",
+    "渠道颜色已更新": "Channel color updated",
+    "更新渠道颜色失败": "Failed to update channel color",
+    "红色": "Red",
+    "橙色": "Orange",
+    "黄色": "Yellow",
+    "绿色": "Green",
+    "青色": "Cyan",
+    "蓝色": "Blue",
+    "紫色": "Purple",
+    "粉色": "Pink"
   }
 }

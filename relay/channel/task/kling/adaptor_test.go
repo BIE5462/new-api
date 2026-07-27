@@ -100,6 +100,117 @@ func TestResolveTaskPriceUsesKlingCombinationAndDuration(t *testing.T) {
 	}
 }
 
+func TestResolveTaskPriceUsesKlingOmniReferenceVideoPrice(t *testing.T) {
+	withConfiguredKlingPrices(t, `[
+		{"model":"kling-v3-omni","mode":"std","sound":"off","has_reference_video":false,"price_per_second":0.01},
+		{"model":"kling-v3-omni","mode":"std","sound":"off","has_reference_video":true,"price_per_second":0.03}
+	]`)
+	withQuotaPerUnit(t, 1000)
+
+	c := testGinContext()
+	c.Set("task_request", relaycommon.TaskSubmitReq{
+		Model: "kling-v3-omni",
+		Metadata: map[string]interface{}{
+			"duration": "5",
+			"video_list": []interface{}{
+				map[string]interface{}{"video_url": "https://example.com/reference.mp4"},
+			},
+		},
+	})
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "kling-v3-omni",
+		UserGroup:       "default",
+		UsingGroup:      "default",
+	}
+
+	priceData, taskErr := (&TaskAdaptor{}).ResolveTaskPrice(c, info)
+	if taskErr != nil {
+		t.Fatalf("unexpected task error: %v", taskErr)
+	}
+	if priceData.Quota != 150 {
+		t.Fatalf("expected reference video quota 150, got %d", priceData.Quota)
+	}
+	if got := priceData.BillingDetails["has_reference_video"]; got != true {
+		t.Fatalf("expected has_reference_video=true, got %v", got)
+	}
+	gotPricePerSecond, ok := priceData.BillingDetails["price_per_second"].(float64)
+	if !ok || math.Abs(gotPricePerSecond-0.03) > 1e-9 {
+		t.Fatalf("expected reference video price_per_second=0.03, got %v", priceData.BillingDetails["price_per_second"])
+	}
+}
+
+func TestResolveTaskPriceUsesKlingOmniNoReferenceVideoPrice(t *testing.T) {
+	withConfiguredKlingPrices(t, `[
+		{"model":"kling-v3-omni","mode":"std","sound":"off","has_reference_video":false,"price_per_second":0.01},
+		{"model":"kling-v3-omni","mode":"std","sound":"off","has_reference_video":true,"price_per_second":0.03}
+	]`)
+	withQuotaPerUnit(t, 1000)
+
+	c := testGinContext()
+	c.Set("task_request", relaycommon.TaskSubmitReq{
+		Model: "kling-v3-omni",
+		Metadata: map[string]interface{}{
+			"duration": "5",
+			"video_list": []interface{}{
+				map[string]interface{}{"refer_type": "base"},
+			},
+		},
+	})
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "kling-v3-omni",
+		UserGroup:       "default",
+		UsingGroup:      "default",
+	}
+
+	priceData, taskErr := (&TaskAdaptor{}).ResolveTaskPrice(c, info)
+	if taskErr != nil {
+		t.Fatalf("unexpected task error: %v", taskErr)
+	}
+	if priceData.Quota != 50 {
+		t.Fatalf("expected no reference video quota 50, got %d", priceData.Quota)
+	}
+	if got := priceData.BillingDetails["has_reference_video"]; got != false {
+		t.Fatalf("expected has_reference_video=false, got %v", got)
+	}
+	gotPricePerSecond, ok := priceData.BillingDetails["price_per_second"].(float64)
+	if !ok || math.Abs(gotPricePerSecond-0.01) > 1e-9 {
+		t.Fatalf("expected no reference video price_per_second=0.01, got %v", priceData.BillingDetails["price_per_second"])
+	}
+}
+
+func TestResolveTaskPriceParsesStringEncodedKlingOmniVideoList(t *testing.T) {
+	withConfiguredKlingPrices(t, `[
+		{"model":"kling-v3-omni","mode":"std","sound":"off","price_per_second":0.01},
+		{"model":"kling-v3-omni","mode":"std","sound":"off","has_reference_video":true,"price_per_second":0.04}
+	]`)
+	withQuotaPerUnit(t, 1000)
+
+	c := testGinContext()
+	c.Set("task_request", relaycommon.TaskSubmitReq{
+		Model: "kling-v3-omni",
+		Metadata: map[string]interface{}{
+			"duration":   "5",
+			"video_list": `[{"url":"https://example.com/reference.mp4"}]`,
+		},
+	})
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "kling-v3-omni",
+		UserGroup:       "default",
+		UsingGroup:      "default",
+	}
+
+	priceData, taskErr := (&TaskAdaptor{}).ResolveTaskPrice(c, info)
+	if taskErr != nil {
+		t.Fatalf("unexpected task error: %v", taskErr)
+	}
+	if priceData.Quota != 200 {
+		t.Fatalf("expected string encoded reference video quota 200, got %d", priceData.Quota)
+	}
+	if got := priceData.BillingDetails["has_reference_video"]; got != true {
+		t.Fatalf("expected has_reference_video=true, got %v", got)
+	}
+}
+
 func TestResolveTaskPriceReturnsModelPriceErrorWhenCombinationMissing(t *testing.T) {
 	withConfiguredKlingPrices(t, `[]`)
 
@@ -122,6 +233,95 @@ func TestResolveTaskPriceReturnsModelPriceErrorWhenCombinationMissing(t *testing
 	}
 	if taskErr.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", taskErr.StatusCode)
+	}
+}
+
+func TestResolveTaskPriceReturnsKlingOmniReferenceVideoDimensionInMissingPriceError(t *testing.T) {
+	withConfiguredKlingPrices(t, `[]`)
+
+	c := testGinContext()
+	c.Set("task_request", relaycommon.TaskSubmitReq{
+		Model: "kling-v3-omni",
+		Metadata: map[string]interface{}{
+			"video_list": []interface{}{
+				map[string]interface{}{"video_url": "https://example.com/reference.mp4"},
+			},
+		},
+	})
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "kling-v3-omni",
+		UserGroup:       "default",
+		UsingGroup:      "default",
+	}
+
+	_, taskErr := (&TaskAdaptor{}).ResolveTaskPrice(c, info)
+	if taskErr == nil {
+		t.Fatal("expected missing price error")
+	}
+	if taskErr.Code != "model_price_error" {
+		t.Fatalf("expected model_price_error, got %s", taskErr.Code)
+	}
+	if !strings.Contains(taskErr.Message, "has_reference_video=true") {
+		t.Fatalf("expected missing price error to include has_reference_video=true, got %q", taskErr.Message)
+	}
+}
+
+func TestKlingReferenceVideoDetection(t *testing.T) {
+	tests := []struct {
+		name     string
+		metadata map[string]interface{}
+		want     bool
+	}{
+		{
+			name:     "nil metadata",
+			metadata: nil,
+			want:     false,
+		},
+		{
+			name: "empty video list",
+			metadata: map[string]interface{}{
+				"video_list": []interface{}{},
+			},
+			want: false,
+		},
+		{
+			name: "object without url",
+			metadata: map[string]interface{}{
+				"video_list": []interface{}{map[string]interface{}{"refer_type": "base"}},
+			},
+			want: false,
+		},
+		{
+			name: "video url",
+			metadata: map[string]interface{}{
+				"video_list": []interface{}{map[string]interface{}{"video_url": "https://example.com/a.mp4"}},
+			},
+			want: true,
+		},
+		{
+			name: "nested metadata video",
+			metadata: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"video_list": []interface{}{map[string]interface{}{"video": "https://example.com/a.mp4"}},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "string encoded url",
+			metadata: map[string]interface{}{
+				"video_list": `[{"url":"https://example.com/a.mp4"}]`,
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasKlingReferenceVideo(tt.metadata); got != tt.want {
+				t.Fatalf("expected %t, got %t", tt.want, got)
+			}
+		})
 	}
 }
 

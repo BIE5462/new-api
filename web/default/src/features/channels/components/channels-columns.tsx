@@ -60,6 +60,7 @@ import {
   formatRelativeTime,
   formatResponseTime,
   getBalanceVariant,
+  getChannelColor,
   getChannelTypeIcon,
   getChannelTypeLabel,
   getResponseTimeConfig,
@@ -579,11 +580,13 @@ export function useChannelsColumns(
       {
         accessorKey: 'name',
         header: t('Name'),
+        sortDescFirst: false,
         meta: { mobileTitle: true },
         cell: ({ row }) => {
           const isTagRow = isTagAggregateRow(row.original)
           const name = row.getValue('name') as string
           const channel = row.original
+          const channelColor = getChannelColor(channel.settings)
 
           // Tag row with expand/collapse
           if (isTagRow) {
@@ -624,6 +627,13 @@ export function useChannelsColumns(
 
           return (
             <div className='flex items-center gap-2'>
+              {channelColor && (
+                <span
+                  className='h-8 w-1 shrink-0 rounded-full ring-1 ring-black/10'
+                  style={{ backgroundColor: channelColor }}
+                  aria-label={t('Channel color')}
+                />
+              )}
               <div className='flex flex-col gap-1'>
                 <div className='flex items-center gap-1.5'>
                   <TruncatedText

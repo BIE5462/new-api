@@ -32,7 +32,7 @@ var defaultVendorRules = map[string]string{
 	"grok":     "xAI",
 	"llama":    "Meta",
 	"doubao":   "字节跳动",
-	"kling":    "快手",
+	"kling":    "kling",
 	"jimeng":   "即梦",
 	"vidu":     "Vidu",
 }
@@ -59,7 +59,7 @@ var defaultVendorIcons = map[string]string{
 	"xAI":        "XAI",
 	"Meta":       "Ollama",
 	"字节跳动":       "Doubao.Color",
-	"快手":         "Kling.Color",
+	"kling":      "Kling.Color",
 	"即梦":         "Jimeng.Color",
 	"Vidu":       "Vidu",
 	"微软":         "AzureAI",

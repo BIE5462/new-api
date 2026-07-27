@@ -1,3 +1,22 @@
+import { useQueryClient } from '@tanstack/react-query'
+import type { Row } from '@tanstack/react-table'
+import {
+  MoreHorizontal,
+  Boxes,
+  Pencil,
+  PlugZap,
+  Gauge,
+  DollarSign,
+  Download,
+  Copy,
+  Power,
+  PowerOff,
+  Key,
+  Trash2,
+  RefreshCw,
+  Loader2,
+  Palette,
+} from 'lucide-react'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -17,40 +36,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useContext, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import type { Row } from '@tanstack/react-table'
-import {
-  MoreHorizontal,
-  Boxes,
-  Pencil,
-  PlugZap,
-  Gauge,
-  DollarSign,
-  Download,
-  Copy,
-  Power,
-  PowerOff,
-  Key,
-  Trash2,
-  RefreshCw,
-  Loader2,
-} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
-import {
-  ADMIN_PERMISSION_ACTIONS,
-  ADMIN_PERMISSION_RESOURCES,
-  hasPermission,
-} from '@/lib/admin-permissions'
-import { useAuthStore } from '@/stores/auth-store'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -58,10 +57,18 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  ADMIN_PERMISSION_ACTIONS,
+  ADMIN_PERMISSION_RESOURCES,
+  hasPermission,
+} from '@/lib/admin-permissions'
+import { useAuthStore } from '@/stores/auth-store'
 
-import { MODEL_FETCHABLE_TYPES } from '../constants'
+import { updateChannelColor } from '../api'
+import { CHANNEL_COLOR_OPTIONS, MODEL_FETCHABLE_TYPES } from '../constants'
 import {
   channelsQueryKeys,
+  getChannelColor,
   handleDeleteChannel,
   handleTestChannel,
   handleToggleChannelStatus,
@@ -87,6 +94,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
+  const [isUpdatingColor, setIsUpdatingColor] = useState(false)
 
   const isEnabled = isChannelEnabled(channel)
   const isMultiKey = isMultiKeyChannel(channel)
@@ -95,6 +103,12 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     ADMIN_PERMISSION_RESOURCES.CHANNEL,
     ADMIN_PERMISSION_ACTIONS.SENSITIVE_WRITE
   )
+  const canEdit = hasPermission(
+    currentUser,
+    ADMIN_PERMISSION_RESOURCES.CHANNEL,
+    ADMIN_PERMISSION_ACTIONS.WRITE
+  )
+  const channelColor = getChannelColor(channel.settings)
 
   const handleEdit = () => {
     setCurrentRow(channel)
@@ -152,6 +166,25 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
       await handleToggleChannelStatus(channel.id, channel.status, queryClient)
     } finally {
       setIsTogglingStatus(false)
+    }
+  }
+
+  const handleColorChange = async (color: string) => {
+    setIsUpdatingColor(true)
+    try {
+      const response = await updateChannelColor(channel.id, color)
+      if (!response.success) {
+        toast.error(response.message || t('Failed to update channel color'))
+        return
+      }
+      toast.success(t('Channel color updated'))
+      await queryClient.invalidateQueries({
+        queryKey: channelsQueryKeys.lists(),
+      })
+    } catch {
+      toast.error(t('Failed to update channel color'))
+    } finally {
+      setIsUpdatingColor(false)
     }
   }
 
@@ -333,6 +366,45 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
               </DropdownMenuShortcut>
             </DropdownMenuItem>
           )}
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={!canEdit || isUpdatingColor}>
+              <Palette size={16} />
+              {t('Set color')}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className='w-44'>
+              <div className='grid grid-cols-4 gap-1 p-1'>
+                {CHANNEL_COLOR_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type='button'
+                    title={t(option.label)}
+                    aria-label={t(option.label)}
+                    className='focus-visible:ring-ring hover:bg-accent relative flex size-8 items-center justify-center rounded-md focus-visible:ring-2 focus-visible:outline-none'
+                    onClick={() => handleColorChange(option.value)}
+                  >
+                    <span
+                      className='size-5 rounded-full ring-1 ring-black/10'
+                      style={{ backgroundColor: option.value }}
+                    />
+                    {channelColor === option.value && (
+                      <span className='border-foreground/70 absolute inset-1 rounded-md border-2' />
+                    )}
+                  </button>
+                ))}
+              </div>
+              {channelColor && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleColorChange('')}>
+                    {t('Clear color')}
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
 
           <DropdownMenuSeparator />
 

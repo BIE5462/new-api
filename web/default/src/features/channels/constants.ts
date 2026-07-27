@@ -267,6 +267,17 @@ export const SUCCESS_MESSAGES = {
 
 export const DEFAULT_PAGE_SIZE = 20
 
+export const CHANNEL_COLOR_OPTIONS = [
+  { label: 'Red', value: '#ef4444' },
+  { label: 'Orange', value: '#f97316' },
+  { label: 'Yellow', value: '#eab308' },
+  { label: 'Green', value: '#22c55e' },
+  { label: 'Cyan', value: '#06b6d4' },
+  { label: 'Blue', value: '#3b82f6' },
+  { label: 'Purple', value: '#8b5cf6' },
+  { label: 'Pink', value: '#ec4899' },
+] as const
+
 export const DEFAULT_CHANNEL_VALUES = {
   name: '',
   type: 0,

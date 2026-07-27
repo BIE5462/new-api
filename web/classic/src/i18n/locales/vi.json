@@ -3175,7 +3175,7 @@
     "获得": "Đã nhận",
     "菜单": "Menu",
     "蓝": "Xanh dương",
-    "蓝色": "Màu xanh dương",
+    "蓝色": "Xanh dương",
     "补全": "Hoàn thành",
     "补全 {{completion}} tokens * 输出倍率 {{completionRatio}}": "Hoàn thành {{completion}} tokens * Tỷ lệ đầu ra {{completionRatio}}",
     "补全 {{completion}} tokens / 1M tokens * {{symbol}}{{price}}": "Completion {{completion}} tokens / 1M tokens * {{symbol}}{{price}}",
@@ -4214,6 +4214,18 @@
     "并确认自行承担部署": "confirm that I bear legal responsibility arising from deployment",
     "运营和收费行为产生的法律责任": "operation and charging behavior",
     "，": ", ",
-    "、": ", "
+    "、": ", ",
+    "设置颜色": "Đặt màu",
+    "清除颜色": "Xóa màu",
+    "渠道颜色": "Màu kênh",
+    "渠道颜色已更新": "Đã cập nhật màu kênh",
+    "更新渠道颜色失败": "Không thể cập nhật màu kênh",
+    "红色": "Đỏ",
+    "橙色": "Cam",
+    "黄色": "Vàng",
+    "绿色": "Xanh lá",
+    "青色": "Xanh lơ",
+    "紫色": "Tím",
+    "粉色": "Hồng"
   }
 }

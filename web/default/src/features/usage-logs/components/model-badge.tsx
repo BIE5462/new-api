@@ -21,10 +21,10 @@ import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 
@@ -156,40 +156,38 @@ function ModelBadgeContent(props: ModelBadgeProps) {
 export function ModelBadge(props: ModelBadgeProps) {
   const { t } = useTranslation()
 
-  if (!props.actualModel) {
-    return <ModelBadgeContent {...props} />
-  }
-
   return (
-    <Popover>
-      <PopoverTrigger
-        render={
-          <button type='button' className='inline-flex items-center gap-1' />
-        }
+    <Tooltip>
+      <TooltipTrigger
+        render={<span className='inline-flex items-center gap-1' />}
       >
         <ModelBadgeContent {...props} />
-        <Route className='text-muted-foreground size-3 shrink-0' />
-      </PopoverTrigger>
-      <PopoverContent className='w-72'>
+        {props.actualModel && (
+          <Route className='text-muted-foreground size-3 shrink-0' />
+        )}
+      </TooltipTrigger>
+      <TooltipContent className='bg-popover text-popover-foreground w-72 flex-col items-stretch gap-2'>
         <div className='space-y-2'>
           <div className='flex items-start justify-between gap-3'>
             <span className='text-muted-foreground text-xs'>
-              {t('Request Model:')}
+              {t('Requested and Billed Model:')}
             </span>
             <span className='truncate font-mono text-xs font-medium'>
               {props.modelName}
             </span>
           </div>
-          <div className='flex items-start justify-between gap-3'>
-            <span className='text-muted-foreground text-xs'>
-              {t('Actual Model:')}
-            </span>
-            <span className='truncate font-mono text-xs font-medium'>
-              {props.actualModel}
-            </span>
-          </div>
+          {props.actualModel && (
+            <div className='flex items-start justify-between gap-3'>
+              <span className='text-muted-foreground text-xs'>
+                {t('Actual Model:')}
+              </span>
+              <span className='truncate font-mono text-xs font-medium'>
+                {props.actualModel}
+              </span>
+            </div>
+          )}
         </div>
-      </PopoverContent>
-    </Popover>
+      </TooltipContent>
+    </Tooltip>
   )
 }

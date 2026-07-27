@@ -26,7 +26,7 @@ import { formatTimestampToDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { StatusBadge } from '@/components/status-badge'
-import { TASK_ACTIONS, TASK_STATUS } from '../../constants'
+import { TASK_STATUS } from '../../constants'
 import { taskActionMapper, taskStatusMapper } from '../../lib/mappers'
 import type { TaskLog } from '../../types'
 import {
@@ -52,6 +52,67 @@ function parseTaskData(data: unknown): unknown[] {
     }
   }
   return []
+}
+
+function isHttpUrl(value: unknown): value is string {
+  return typeof value === 'string' && /^https?:\/\//i.test(value)
+}
+
+function hasVideoInTaskData(data: unknown): boolean {
+  let payload = data
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload)
+    } catch {
+      return false
+    }
+  }
+  if (!payload || typeof payload !== 'object') return false
+
+  const record = payload as Record<string, unknown>
+  if (
+    isHttpUrl(record.result_url) ||
+    isHttpUrl(record.video_url) ||
+    isHttpUrl(record.download_url) ||
+    isHttpUrl(record.url)
+  ) {
+    return true
+  }
+
+  const nestedData = record.data
+  if (nestedData && typeof nestedData === 'object') {
+    const nested = nestedData as Record<string, unknown>
+    if (
+      isHttpUrl(nested.result_url) ||
+      isHttpUrl(nested.video_url) ||
+      isHttpUrl(nested.download_url) ||
+      isHttpUrl(nested.url)
+    ) {
+      return true
+    }
+
+    const videos = (nested.task_result as Record<string, unknown> | undefined)
+      ?.videos
+    if (Array.isArray(videos)) {
+      return videos.some((video) => {
+        if (!video || typeof video !== 'object') return false
+        const videoRecord = video as Record<string, unknown>
+        return isHttpUrl(videoRecord.url) || isHttpUrl(videoRecord.video_url)
+      })
+    }
+  }
+
+  const videos = (record.task_result as Record<string, unknown> | undefined)
+    ?.videos
+  if (Array.isArray(videos)) {
+    return videos.some((video) => {
+      if (!video || typeof video !== 'object') return false
+      const videoRecord = video as Record<string, unknown>
+      return isHttpUrl(videoRecord.url) || isHttpUrl(videoRecord.video_url)
+    })
+  }
+
+  return false
 }
 
 function AudioPreviewCell({ log }: { log: TaskLog }) {
@@ -236,16 +297,13 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
           }
         }
 
-        const isVideoTask =
-          log.action === TASK_ACTIONS.GENERATE ||
-          log.action === TASK_ACTIONS.TEXT_GENERATE ||
-          log.action === TASK_ACTIONS.FIRST_TAIL_GENERATE ||
-          log.action === TASK_ACTIONS.REFERENCE_GENERATE ||
-          log.action === TASK_ACTIONS.REMIX_GENERATE
         const isSuccess = status === TASK_STATUS.SUCCESS
-        const isUrl = failReason?.startsWith('http')
+        const hasVideoResult =
+          isHttpUrl(log.result_url) ||
+          isHttpUrl(failReason) ||
+          hasVideoInTaskData(log.data)
 
-        if (isSuccess && isVideoTask && isUrl) {
+        if (isSuccess && hasVideoResult) {
           const videoUrl = `/v1/videos/${log.task_id}/content`
           return (
             <a

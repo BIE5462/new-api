@@ -240,7 +240,8 @@ export const getPricingTableColumns = ({
         <div className='space-y-1'>
           {priceItems.map((item) => (
             <div key={item.key} className='text-gray-700'>
-              {item.label} {item.value}
+              {item.label ? `${item.label} ` : ''}
+              {item.value}
               {item.suffix}
             </div>
           ))}
