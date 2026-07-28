@@ -22,6 +22,7 @@ import { Card, Avatar, Skeleton, Tag } from '@douyinfe/semi-ui';
 import { VChart } from '@visactor/react-vchart';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import ChartErrorBoundary from './ChartErrorBoundary';
 
 const StatsCards = ({
   groupedStatsData,
@@ -96,10 +97,12 @@ const StatsCards = ({
                     (loading ||
                       (item.trendData && item.trendData.length > 0)) && (
                       <div className='w-24 h-10'>
-                        <VChart
-                          spec={getTrendSpec(item.trendData, item.trendColor)}
-                          option={CHART_CONFIG}
-                        />
+                        <ChartErrorBoundary>
+                          <VChart
+                            spec={getTrendSpec(item.trendData, item.trendColor)}
+                            option={CHART_CONFIG}
+                          />
+                        </ChartErrorBoundary>
                       </div>
                     )
                   )}

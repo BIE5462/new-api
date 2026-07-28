@@ -119,23 +119,42 @@ const Dashboard = () => {
   };
 
   // ========== 数据准备 ==========
-  const apiInfoData = statusState?.status?.api_info || [];
-  const announcementData = (statusState?.status?.announcements || []).map(
-    (item) => {
-      const pubDate = item?.publishDate ? new Date(item.publishDate) : null;
+  const apiInfoData = Array.isArray(statusState?.status?.api_info)
+    ? statusState.status.api_info.filter(
+        (item) => item && typeof item === 'object',
+      )
+    : [];
+  const announcementData = (
+    Array.isArray(statusState?.status?.announcements)
+      ? statusState.status.announcements
+      : []
+  )
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const publishDate = item?.publishDate ? String(item.publishDate) : '';
+      const pubDate = publishDate ? new Date(publishDate) : null;
       const absoluteTime =
         pubDate && !isNaN(pubDate.getTime())
           ? `${pubDate.getFullYear()}-${String(pubDate.getMonth() + 1).padStart(2, '0')}-${String(pubDate.getDate()).padStart(2, '0')} ${String(pubDate.getHours()).padStart(2, '0')}:${String(pubDate.getMinutes()).padStart(2, '0')}`
-          : item?.publishDate || '';
-      const relativeTime = getRelativeTime(item.publishDate);
+          : publishDate;
+      const relativeTime = getRelativeTime(publishDate);
       return {
         ...item,
+        content: String(item.content ?? ''),
+        extra: item.extra == null ? '' : String(item.extra),
         time: absoluteTime,
         relative: relativeTime,
       };
-    },
-  );
-  const faqData = statusState?.status?.faq || [];
+    });
+  const faqData = Array.isArray(statusState?.status?.faq)
+    ? statusState.status.faq
+        .filter((item) => item && typeof item === 'object')
+        .map((item) => ({
+          ...item,
+          question: String(item.question ?? ''),
+          answer: item.answer == null ? '' : String(item.answer),
+        }))
+    : [];
 
   const uptimeLegendData = Object.entries(UPTIME_STATUS_MAP).map(
     ([status, info]) => ({

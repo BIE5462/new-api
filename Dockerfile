@@ -22,7 +22,7 @@ COPY ./web/classic ./classic
 COPY ./VERSION /build/VERSION
 RUN cd classic && VITE_REACT_APP_VERSION=$(cat /build/VERSION) bun run build
 
-FROM docker.1ms.run/library/golang:1.26-alpine AS builder2
+FROM golang:1.26-alpine AS builder2
 ENV GO111MODULE=on CGO_ENABLED=0
 
 ARG TARGETOS

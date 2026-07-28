@@ -105,6 +105,28 @@ func recordManageAuditFor(c *gin.Context, targetUserId int, action string, param
 	markAuditLogged(c)
 }
 
+// recordQuotaAdjustmentAuditFor writes the quota change to both sides of the
+// operation: the administrator's log and the target user's log. Keeping the
+// same structured operation in both records lets each user see the concrete
+// balance change without changing the visibility of unrelated admin actions.
+func recordQuotaAdjustmentAuditFor(c *gin.Context, targetUserId int, action string, params map[string]interface{}) {
+	if params == nil {
+		params = map[string]interface{}{}
+	}
+	operatorUserId := c.GetInt("id")
+	if _, ok := params["target_user_id"]; !ok && targetUserId > 0 && targetUserId != operatorUserId {
+		params["target_user_id"] = targetUserId
+	}
+
+	content := auditContentEN(action, params)
+	adminInfo := auditOperatorInfo(c)
+	model.RecordOperationAuditLog(operatorUserId, content, c.ClientIP(), action, params, adminInfo, nil)
+	if targetUserId > 0 && targetUserId != operatorUserId {
+		model.RecordOperationAuditLog(targetUserId, content, c.ClientIP(), action, params, nil, nil)
+	}
+	markAuditLogged(c)
+}
+
 // recordUserSecurityAudit 记录普通用户自己的安全敏感操作（如 passkey 绑定/解绑）。
 // 这类日志没有管理员操作者，不写 admin_info；同时不依赖 AdminAuth/RootAuth 的兜底。
 func recordUserSecurityAudit(c *gin.Context, userId int, action string, params map[string]interface{}) {

@@ -21,6 +21,7 @@ import React from 'react';
 import { Card, Tabs, TabPane } from '@douyinfe/semi-ui';
 import { PieChart } from 'lucide-react';
 import { VChart } from '@visactor/react-vchart';
+import ChartErrorBoundary from './ChartErrorBoundary';
 
 const ChartsPanel = ({
   activeChartTab,
@@ -70,22 +71,34 @@ const ChartsPanel = ({
     >
       <div className='h-96 p-2'>
         {activeChartTab === '1' && (
-          <VChart spec={spec_line} option={CHART_CONFIG} />
+          <ChartErrorBoundary>
+            <VChart spec={spec_line} option={CHART_CONFIG} />
+          </ChartErrorBoundary>
         )}
         {activeChartTab === '2' && (
-          <VChart spec={spec_model_line} option={CHART_CONFIG} />
+          <ChartErrorBoundary>
+            <VChart spec={spec_model_line} option={CHART_CONFIG} />
+          </ChartErrorBoundary>
         )}
         {activeChartTab === '3' && (
-          <VChart spec={spec_pie} option={CHART_CONFIG} />
+          <ChartErrorBoundary>
+            <VChart spec={spec_pie} option={CHART_CONFIG} />
+          </ChartErrorBoundary>
         )}
         {activeChartTab === '4' && (
-          <VChart spec={spec_rank_bar} option={CHART_CONFIG} />
+          <ChartErrorBoundary>
+            <VChart spec={spec_rank_bar} option={CHART_CONFIG} />
+          </ChartErrorBoundary>
         )}
         {activeChartTab === '5' && isAdminUser && (
-          <VChart spec={spec_user_rank} option={CHART_CONFIG} />
+          <ChartErrorBoundary>
+            <VChart spec={spec_user_rank} option={CHART_CONFIG} />
+          </ChartErrorBoundary>
         )}
         {activeChartTab === '6' && isAdminUser && (
-          <VChart spec={spec_user_trend} option={CHART_CONFIG} />
+          <ChartErrorBoundary>
+            <VChart spec={spec_user_trend} option={CHART_CONFIG} />
+          </ChartErrorBoundary>
         )}
       </div>
     </Card>

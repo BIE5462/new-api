@@ -70,6 +70,28 @@ export const updateMapValue = (map, key, value) => {
   map.set(key, map.get(key) + value);
 };
 
+// API 数据来自多个历史版本，先把数值字段收敛为图表可以处理的类型。
+export const normalizeQuotaData = (data) => {
+  if (!Array.isArray(data)) return [];
+
+  return data
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const createdAt = Number(item.created_at);
+      return {
+        ...item,
+        model_name: String(item.model_name ?? '未知'),
+        created_at: Number.isFinite(createdAt) ? createdAt : null,
+        quota: Number.isFinite(Number(item.quota)) ? Number(item.quota) : 0,
+        count: Number.isFinite(Number(item.count)) ? Number(item.count) : 0,
+        token_used: Number.isFinite(Number(item.token_used))
+          ? Number(item.token_used)
+          : 0,
+      };
+    })
+    .filter((item) => item.created_at !== null);
+};
+
 export const initializeMaps = (key, ...maps) => {
   maps.forEach((map) => {
     if (!map.has(key)) {
@@ -101,7 +123,15 @@ export const updateChartSpec = (
 
 export const getTrendSpec = (data, color) => ({
   type: 'line',
-  data: [{ id: 'trend', values: data.map((val, idx) => ({ x: idx, y: val })) }],
+  data: [
+    {
+      id: 'trend',
+      values: (Array.isArray(data) ? data : []).map((val, idx) => ({
+        x: idx,
+        y: Number.isFinite(Number(val)) ? Number(val) : 0,
+      })),
+    },
+  ],
   xField: 'x',
   yField: 'y',
   height: 40,
@@ -174,7 +204,7 @@ export const renderMonitorList = (
   getUptimeStatusText,
   t,
 ) => {
-  if (!monitors || monitors.length === 0) {
+  if (!Array.isArray(monitors) || monitors.length === 0) {
     return (
       <div className='flex justify-center items-center py-4'>
         <Empty
@@ -189,11 +219,13 @@ export const renderMonitorList = (
   }
 
   const grouped = {};
-  monitors.forEach((m) => {
-    const g = m.group || '';
-    if (!grouped[g]) grouped[g] = [];
-    grouped[g].push(m);
-  });
+  monitors
+    .filter((m) => m && typeof m === 'object')
+    .forEach((m) => {
+      const g = String(m.group ?? '');
+      if (!grouped[g]) grouped[g] = [];
+      grouped[g].push(m);
+    });
 
   const renderItem = (monitor, idx) => (
     <div key={idx} className='p-2 hover:bg-white rounded-lg transition-colors'>
@@ -204,11 +236,16 @@ export const renderMonitorList = (
             style={{ backgroundColor: getUptimeStatusColor(monitor.status) }}
           />
           <span className='text-sm font-medium text-gray-900'>
-            {monitor.name}
+            {String(monitor.name ?? '')}
           </span>
         </div>
         <span className='text-xs text-gray-500'>
-          {((monitor.uptime || 0) * 100).toFixed(2)}%
+          {(
+            (Number.isFinite(Number(monitor.uptime))
+              ? Number(monitor.uptime)
+              : 0) * 100
+          ).toFixed(2)}
+          %
         </span>
       </div>
       <div className='flex items-center gap-2'>
@@ -217,9 +254,13 @@ export const renderMonitorList = (
         </span>
         <div className='flex-1'>
           <Progress
-            percent={(monitor.uptime || 0) * 100}
+            percent={
+              (Number.isFinite(Number(monitor.uptime))
+                ? Number(monitor.uptime)
+                : 0) * 100
+            }
             showInfo={false}
-            aria-label={`${monitor.name} uptime`}
+            aria-label={`${String(monitor.name ?? '')} uptime`}
             stroke={getUptimeStatusColor(monitor.status)}
           />
         </div>
@@ -249,6 +290,7 @@ export const processRawData = (
   initializeMaps,
   updateMapValue,
 ) => {
+  data = normalizeQuotaData(data);
   const result = {
     totalQuota: 0,
     totalTimes: 0,
@@ -329,6 +371,7 @@ export const calculateTrendData = (
 };
 
 export const aggregateDataByTimeAndModel = (data, dataExportDefaultTime) => {
+  data = normalizeQuotaData(data);
   const aggregatedData = new Map();
 
   // 检查数据是否跨年
@@ -365,12 +408,15 @@ export const generateChartTimePoints = (
   data,
   dataExportDefaultTime,
 ) => {
+  data = normalizeQuotaData(data);
   let chartTimePoints = Array.from(
     new Set([...aggregatedData.values()].map((d) => d.time)),
   );
 
   if (chartTimePoints.length < DEFAULTS.MAX_TREND_POINTS) {
-    const lastTime = Math.max(...data.map((item) => item.created_at));
+    const lastTime = data.length
+      ? Math.max(...data.map((item) => item.created_at))
+      : Date.now() / 1000;
     const interval = getTimeInterval(dataExportDefaultTime, true);
 
     // 生成时间点数组，用于检查是否跨年
@@ -390,6 +436,10 @@ export const generateChartTimePoints = (
 
 // ========== 用户维度数据处理 ==========
 export const processUserData = (data, dataExportDefaultTime, limit = 10) => {
+  data = normalizeQuotaData(data).map((item) => ({
+    ...item,
+    username: String(item.username ?? '未知'),
+  }));
   const userQuotaTotal = new Map();
   data.forEach((item) => {
     const prev = userQuotaTotal.get(item.username) || 0;

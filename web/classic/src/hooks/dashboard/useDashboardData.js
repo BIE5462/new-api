@@ -21,7 +21,11 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { API, isAdmin, showError, timestamp2string } from '../../helpers';
-import { getDefaultTime, getInitialTimestamp } from '../../helpers/dashboard';
+import {
+  getDefaultTime,
+  getInitialTimestamp,
+  normalizeQuotaData,
+} from '../../helpers/dashboard';
 import { TIME_OPTIONS } from '../../constants/dashboard.constants';
 import { useIsMobile } from '../common/useIsMobile';
 import { useMinimumLoadingTime } from '../common/useMinimumLoadingTime';
@@ -82,7 +86,6 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
   const [activeUptimeTab, setActiveUptimeTab] = useState('');
 
   // ========== 常量 ==========
-  const now = new Date();
   const isAdminUser = isAdmin();
 
   // ========== Panel enable flags ==========
@@ -173,17 +176,19 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
       const res = await API.get(url);
       const { success, message, data } = res.data;
       if (success) {
-        setQuotaData(data);
-        if (data.length === 0) {
-          data.push({
+        const normalizedData = normalizeQuotaData(data);
+        if (normalizedData.length === 0) {
+          normalizedData.push({
             count: 0,
             model_name: '无数据',
             quota: 0,
-            created_at: now.getTime() / 1000,
+            token_used: 0,
+            created_at: Date.now() / 1000,
           });
         }
-        data.sort((a, b) => a.created_at - b.created_at);
-        return data;
+        normalizedData.sort((a, b) => a.created_at - b.created_at);
+        setQuotaData(normalizedData);
+        return normalizedData;
       } else {
         showError(message);
         return [];
@@ -191,7 +196,7 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
     } finally {
       setLoading(false);
     }
-  }, [inputs, dataExportDefaultTime, isAdminUser, now]);
+  }, [inputs, dataExportDefaultTime, isAdminUser]);
 
   const loadUptimeData = useCallback(async () => {
     setUptimeLoading(true);
@@ -199,9 +204,22 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
       const res = await API.get('/api/uptime/status');
       const { success, message, data } = res.data;
       if (success) {
-        setUptimeData(data || []);
-        if (data && data.length > 0 && !activeUptimeTab) {
-          setActiveUptimeTab(data[0].categoryName);
+        const normalizedData = Array.isArray(data)
+          ? data
+              .filter((item) => item && typeof item === 'object')
+              .map((item, index) => ({
+                ...item,
+                categoryName: String(item.categoryName ?? `group-${index}`),
+                monitors: Array.isArray(item.monitors)
+                  ? item.monitors.filter(
+                      (monitor) => monitor && typeof monitor === 'object',
+                    )
+                  : [],
+              }))
+          : [];
+        setUptimeData(normalizedData);
+        if (normalizedData.length > 0 && !activeUptimeTab) {
+          setActiveUptimeTab(normalizedData[0].categoryName);
         }
       } else {
         showError(message);
@@ -223,7 +241,7 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
       const res = await API.get(url);
       const { success, message, data } = res.data;
       if (success) {
-        return data || [];
+        return normalizeQuotaData(data);
       } else {
         showError(message);
         return [];
